@@ -158,7 +158,14 @@ class FullTxCborReassemblerTest {
                 .content("{\"type\":\"sig\",\"keyHash\":\"" + keyHash + "\"}")
                 .build();
 
-        AuxData auxData = new AuxData(metadataCborHex, null, List.of(yaciNativeScript), null, null, null);
+        // A PlutusV2 script attached via auxiliary data (content = CBOR bytestring wrapping the raw
+        // 7-byte script), exercising the plutus path of the aux-script fix, not just native scripts.
+        var yaciAuxPlutusV2 = com.bloxbean.cardano.yaci.core.model.PlutusScript.builder()
+                .type(com.bloxbean.cardano.yaci.core.model.PlutusScriptType.PlutusScriptV2)
+                .content("4746010000220011")
+                .build();
+
+        AuxData auxData = new AuxData(metadataCborHex, null, List.of(yaciNativeScript), null, List.of(yaciAuxPlutusV2), null);
 
         com.bloxbean.cardano.yaci.helper.model.Transaction tx = com.bloxbean.cardano.yaci.helper.model.Transaction.builder()
                 .txHash("dummyTxHashAux")
@@ -176,6 +183,7 @@ class FullTxCborReassemblerTest {
         // The bug being fixed: aux scripts (native/PlutusV1-3) used to be silently dropped -- only
         // metadata was ever mapped. Assert the native script attached via auxiliary data survives too.
         assertThat(roundTripped.getAuxiliaryData().getNativeScripts()).hasSize(1);
+        assertThat(roundTripped.getAuxiliaryData().getPlutusV2Scripts()).hasSize(1);
         var nativeScript = roundTripped.getAuxiliaryData().getNativeScripts().get(0);
         assertThat(nativeScript).isInstanceOf(com.bloxbean.cardano.client.transaction.spec.script.ScriptPubkey.class);
         assertThat(((com.bloxbean.cardano.client.transaction.spec.script.ScriptPubkey) nativeScript).getKeyHash())

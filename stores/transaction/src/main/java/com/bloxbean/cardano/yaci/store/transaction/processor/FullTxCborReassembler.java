@@ -27,15 +27,15 @@ import java.util.List;
 
 /**
  * Reassembles the FULL signed transaction CBOR (body + witness set + isValid + auxiliary data --
- * CBOR array, tag {@code 84...}) from a yaci-helper {@link com.bloxbean.cardano.yaci.helper.model.Transaction},
- * whose {@code getBody().getCbor()} only contains the transaction BODY (CBOR map, tag {@code a4...}).
+ * a CBOR array, leading byte {@code 0x84...}) from a yaci-helper {@link com.bloxbean.cardano.yaci.helper.model.Transaction},
+ * whose {@code getBody().getCbor()} only contains the transaction BODY (a CBOR map, leading byte {@code 0xa4...}).
  * <p>
  * The transaction body is mandatory: any failure deserializing it is unrecoverable and propagates to the
  * caller, which is expected to fall back to storing body-only CBOR (see
  * {@link TransactionProcessor#collectTransactionCbor}). Every other component (witnesses, scripts,
  * redeemers, datums, auxiliary data/metadata) is best-effort: a single malformed/unmappable item is
  * skipped (logged at debug) rather than aborting the whole reassembly, so the caller still gets a valid
- * {@code 84...} transaction with whatever detail could be recovered.
+ * {@code 0x84...} transaction with whatever detail could be recovered.
  * <p>
  * The body is never re-serialized through the CCL {@code TransactionBody} model: it is decoded once into a
  * raw {@code co.nstant.in.cbor} {@link DataItem} and placed into the transaction array verbatim, byte-for-byte
@@ -50,7 +50,7 @@ public class FullTxCborReassembler {
 
     /**
      * @param tx the yaci-helper transaction model for a single processed transaction
-     * @return the full signed transaction, CBOR-serialized (array, tag {@code 84...})
+     * @return the full signed transaction, CBOR-serialized (array, leading byte {@code 0x84...})
      * @throws Exception if the mandatory transaction body cannot be deserialized
      */
     public static byte[] reassemble(com.bloxbean.cardano.yaci.helper.model.Transaction tx) throws Exception {

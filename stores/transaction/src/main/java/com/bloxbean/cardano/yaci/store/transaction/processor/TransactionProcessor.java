@@ -73,6 +73,8 @@ public class TransactionProcessor {
         List<Txn> txList = new ArrayList<>();
         List<TxnCbor> txnCborList = new ArrayList<>();
         boolean saveCborEnabled = transactionStoreProperties.isSaveCbor();
+        //saveFullTxCbor works standalone -- it doesn't require saveCbor to also be enabled.
+        boolean collectCbor = saveCborEnabled || transactionStoreProperties.isSaveFullTxCbor();
 
         var txIndex = new AtomicInteger(0);
         transactions.forEach(transaction -> {
@@ -129,7 +131,7 @@ public class TransactionProcessor {
                     .invalid(transaction.isInvalid())
                     .build();
 
-            if (saveCborEnabled) {
+            if (collectCbor) {
                 collectTransactionCbor(transaction, txnCborList);
             }
 
@@ -150,7 +152,7 @@ public class TransactionProcessor {
             publisher.publishEvent(new TxnEvent(event.getMetadata(), txList));
         }
 
-        if (saveCborEnabled && !txnCborList.isEmpty()) {
+        if (collectCbor && !txnCborList.isEmpty()) {
             transactionCborStorage.save(txnCborList);
         }
 

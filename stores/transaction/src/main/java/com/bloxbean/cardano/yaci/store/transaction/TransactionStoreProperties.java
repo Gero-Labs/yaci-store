@@ -44,7 +44,7 @@ public class TransactionStoreProperties {
      * constituent parts and stores that instead of the body-only CBOR (CBOR map, tag a4).
      * This is useful for wallets and clients that need the complete signed transaction, e.g. for re-broadcast
      * or witness verification.
-     * Note: Has no effect unless {@code saveCbor} is also enabled.
+     * Note: Works standalone -- does not require {@code saveCbor} to also be enabled.
      */
     @Builder.Default
     private boolean saveFullTxCbor = false;

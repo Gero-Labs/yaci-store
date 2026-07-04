@@ -282,6 +282,14 @@ public class TransactionProcessor {
 
         byte[] cborData = HexUtil.decodeHexString(cborHex);
 
+        if (transactionStoreProperties.isSaveFullTxCbor()) {
+            try {
+                cborData = FullTxCborReassembler.reassemble(transaction);
+            } catch (Exception e) {
+                log.debug("Unable to reassemble full-tx CBOR for transaction {}. Falling back to body-only CBOR.", transaction.getTxHash(), e);
+            }
+        }
+
         txnCborList.add(TxnCbor.builder()
                 .txHash(transaction.getTxHash())
                 .cborData(cborData)

@@ -58,8 +58,10 @@ record the actual source commit separately.
 ## Database and rollout requirements
 
 The pool-block index is optional and an upgraded JAR does not create it.
-Plan its creation separately on each target Yaci database, using the existing
-optional-index tooling or reviewed concurrent-index maintenance. Verify its
+Plan its creation separately on each target Yaci database. With a running writer,
+use reviewed `CREATE INDEX CONCURRENTLY` maintenance: the optional-index tooling
+uses plain `CREATE INDEX`, which blocks writes, so use it only with the writer
+stopped. Verify the index's
 validity and an ordered index scan for both page directions before declaring
 the pool-block timeout fixed. This branch performs no live database changes.
 

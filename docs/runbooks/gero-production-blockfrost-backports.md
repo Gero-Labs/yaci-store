@@ -6,6 +6,9 @@ upstream changes from PRs [#1253](https://github.com/bloxbean/yaci-store/pull/12
 [#1255](https://github.com/bloxbean/yaci-store/pull/1255), and
 [#1254](https://github.com/bloxbean/yaci-store/pull/1254): unordered epoch bounds,
 slot-bounded block-address outputs, and the optional `block(slot_leader, number)` index.
+The PR targets `fix/balance-rollback-latest-row`, whose newer `2eb995ad1` commit
+adds rollback regression tests. Those tests are retained; account runtime code is
+unchanged. The build workflow also covers PRs into this production baseline branch.
 
 The current production image, `registry.gerowallet.io/gero/yaci-store:3.0.0-beta4-cf1b0d4-y1`,
 also contains a separately patched `yaci-core-0.4.6.jar`. Its
@@ -64,6 +67,9 @@ uses plain `CREATE INDEX`, which blocks writes, so use it only with the writer
 stopped. Verify the index's
 validity and an ordered index scan for both page directions before declaring
 the pool-block timeout fixed. This branch performs no live database changes.
+Concrete concurrent maintenance SQL and suspended per-network Jobs are prepared
+in the Nexus repository under `k8s/yaci/yaci-pool-block-index-bootstrap*`; follow
+its `k8s/koios/README.md` maintenance coordination and acceptance steps.
 
 Epoch-bound recomputation corrects first/last time and maximum slot when the
 aggregate is next saved. It does not repair fees/output already stored incorrectly

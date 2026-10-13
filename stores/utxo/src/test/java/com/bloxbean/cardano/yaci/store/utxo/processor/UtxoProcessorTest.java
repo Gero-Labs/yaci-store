@@ -10,6 +10,7 @@ import com.bloxbean.cardano.yaci.store.events.EventMetadata;
 import com.bloxbean.cardano.yaci.store.events.TransactionEvent;
 import com.bloxbean.cardano.yaci.store.utxo.storage.AddressStorage;
 import com.bloxbean.cardano.yaci.store.utxo.storage.UtxoStorage;
+import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,7 +62,8 @@ public class UtxoProcessorTest {
     @BeforeEach
     public void setup() {
 //        openMocks(this);
-        utxoProcessor = new UtxoProcessor(utxoStorage, addressStorage, publisher, stakingClient, meterRegistry);
+        utxoProcessor = new UtxoProcessor(utxoStorage, addressStorage, publisher, stakingClient, meterRegistry,
+                new UtxoStoreProperties(), null);
     }
 
     @Test

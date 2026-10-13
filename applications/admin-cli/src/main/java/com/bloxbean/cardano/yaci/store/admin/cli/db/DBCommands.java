@@ -11,6 +11,7 @@ import com.bloxbean.cardano.yaci.store.dbutils.index.service.RollbackService;
 import com.bloxbean.cardano.yaci.store.dbutils.index.util.DatabaseUtils;
 import com.bloxbean.cardano.yaci.store.dbutils.index.util.IndexLoader;
 import com.bloxbean.cardano.yaci.store.dbutils.index.util.RollbackLoader;
+import com.bloxbean.cardano.yaci.store.dbutils.utxo.UnspentUtxoBackfillService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,7 @@ public class DBCommands {
     private final IndexService indexService;
     private final RollbackService rollbackService;
     private final DatabaseUtils databaseUtils;
+    private final UnspentUtxoBackfillService unspentUtxoBackfillService;
 
     @Value("${store.admin-cli.db.rollback.rollback-files:rollback.yml}")
     private String rollbackFiles;
@@ -66,6 +68,25 @@ public class DBCommands {
 
     @Value("${store.account.pruning-enabled:false}")
     private boolean accountPruningEnabled;
+
+    @Value("${store.utxo.unspent-table-enabled:false}")
+    private boolean unspentTableEnabled;
+
+    @Command(description = "Fill an existing PostgreSQL current UTxO table in bounded, resumable chunks")
+    public void backfillUnspentUtxos(
+            @Option(longNames = "from-slot", defaultValue = "-1", description = "First slot, including genesis -1") long fromSlot,
+            @Option(longNames = "to-slot", description = "Last slot; default is the current output tip") Long toSlot,
+            @Option(longNames = "chunk-slots", defaultValue = "4320", description = "Slots per transaction") long chunkSlots,
+            @Option(longNames = "statement-timeout-ms", defaultValue = "5000") int statementTimeoutMs,
+            @Option(longNames = "lock-timeout-ms", defaultValue = "250") int lockTimeoutMs) {
+        if (!unspentTableEnabled) throw new IllegalStateException("Enable current UTxO maintenance before backfilling");
+        if (!databaseUtils.tableExists("address_utxo_unspent")) throw new IllegalStateException("Current UTxO migration has not run");
+        long tip = toSlot == null ? unspentUtxoBackfillService.tipSlot() : toSlot;
+        long copied = unspentUtxoBackfillService.backfill(fromSlot, tip, chunkSlots, statementTimeoutMs, lockTimeoutMs);
+        int removed = unspentUtxoBackfillService.reconcileSpentAfter(tip, statementTimeoutMs, lockTimeoutMs);
+        writeLn(success("Requested current UTxO interval complete: slots %d..%d, copied %d, reconciled %d. Verify completeness before enabling reads.",
+                fromSlot, tip, copied, removed));
+    }
 
     @Command(description = "Apply the default indexes required for read operations.")
     public void applyIndexes(@Option(longNames = "skip-extra-indexes", defaultValue = "false", description = "Skip additional optional indexes.") boolean skipExtraIndexes) {

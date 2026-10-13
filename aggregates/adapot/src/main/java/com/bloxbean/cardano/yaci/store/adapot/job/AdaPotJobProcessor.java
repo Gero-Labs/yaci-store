@@ -240,7 +240,7 @@ public class AdaPotJobProcessor {
             //Now take snapshot
             start = Instant.now();
             ensureCurrentJob(job, cancelled);
-            stakeSnapshotService.takeStakeSnapshot(epoch - 1);
+            stakeSnapshotService.takeStakeSnapshot(epoch - 1, job.getSlot(), job.getBlockHash());
             end = Instant.now();
             job.setStakeSnapshotTime(end.toEpochMilli() - start.toEpochMilli());
 

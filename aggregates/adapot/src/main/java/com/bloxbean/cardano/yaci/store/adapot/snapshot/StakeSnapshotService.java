@@ -2,6 +2,7 @@ package com.bloxbean.cardano.yaci.store.adapot.snapshot;
 
 import com.bloxbean.cardano.yaci.store.adapot.AdaPotProperties;
 import com.bloxbean.cardano.yaci.store.adapot.storage.PartitionManager;
+import com.bloxbean.cardano.yaci.store.adapot.service.EpochStakeTotalService;
 import com.bloxbean.cardano.yaci.store.dbutils.index.util.DatabaseUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,13 +23,16 @@ public class StakeSnapshotService {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final AdaPotProperties adaPotProperties;
     private final PartitionManager partitionManager;
+    private final EpochStakeTotalService epochStakeTotalService;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
     public void takeStakeSnapshot(int epoch) {
-        log.info("Taking stake snapshot for epoch : " + epoch);
+        takeStakeSnapshot(epoch, null, null);
+    }
 
-        // Ensure partition exists for this epoch before taking snapshot
-        partitionManager.ensureEpochStakePartition(epoch);
+    @Transactional(propagation = Propagation.REQUIRES_NEW, isolation = Isolation.READ_COMMITTED)
+    public void takeStakeSnapshot(int epoch, Long sourceSlot, String sourceBlockHash) {
+        log.info("Taking stake snapshot for epoch : " + epoch);
 
         String tableType = "";
         //If postgres, set synchronous_commit to off for rest of the transaction
@@ -51,8 +55,6 @@ public class StakeSnapshotService {
                 log.warn("Failed to set work_mem: {}. Continuing with default settings.", e.getMessage());
             }
         }
-
-        jdbcTemplate.update("delete from epoch_stake where epoch = :epoch", new MapSqlParameterSource().addValue("epoch", epoch));
 
         // Drop temp tables in parallel
         List<String> dropQueries = List.of(
@@ -274,9 +276,28 @@ public class StakeSnapshotService {
         params.addValue("snapshot_epoch", epoch + 1);
         params.addValue("activeEpoch", epoch + 2);
 
+        // Lock only while replacing/publishing the snapshot, not while building
+        // the historical balance/reward temp tables. Recheck the source job
+        // here, so a rollback during preparation cannot publish orphaned rows.
+        epochStakeTotalService.lock();
+        if (sourceSlot != null) requireSourceJob(epoch, sourceSlot, sourceBlockHash);
+        partitionManager.ensureEpochStakePartition(epoch);
+        jdbcTemplate.update("delete from epoch_stake where epoch = :epoch", params);
         jdbcTemplate.update(query, params);
+        epochStakeTotalService.refreshCompletedSnapshot(epoch);
 
         log.info("Stake snapshot for epoch : {} is taken", epoch);
         log.info(">>>>>>>>>>>>>>>>>>>> Stake Snapshot taken for epoch : {} <<<<<<<<<<<<<<<<<<<<", epoch);
+    }
+
+    private void requireSourceJob(int epoch, long sourceSlot, String sourceBlockHash) {
+        var source = new MapSqlParameterSource().addValue("jobEpoch", epoch + 1)
+                .addValue("slot", sourceSlot).addValue("blockHash", sourceBlockHash, java.sql.Types.VARCHAR);
+        if (jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM adapot_jobs WHERE epoch = :jobEpoch AND slot = :slot AND type = 'REWARD_CALC'
+                  AND ((block_hash = :blockHash) OR (block_hash IS NULL AND :blockHash IS NULL))
+                """, source, Long.class) == 0) {
+            throw new IllegalStateException("Stake snapshot source job was removed by rollback");
+        }
     }
 }

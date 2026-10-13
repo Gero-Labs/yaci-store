@@ -15,6 +15,7 @@ import com.bloxbean.cardano.yaci.store.common.domain.UtxoKey;
 import com.bloxbean.cardano.yaci.store.common.util.ErrorCode;
 import com.bloxbean.cardano.yaci.store.events.ErrorEvent;
 import com.bloxbean.cardano.yaci.store.events.EventMetadata;
+import com.bloxbean.cardano.yaci.store.events.RollbackEvent;
 import com.bloxbean.cardano.yaci.store.events.TransactionEvent;
 import com.bloxbean.cardano.yaci.store.events.internal.PreCommitEvent;
 import com.bloxbean.cardano.yaci.store.transaction.TransactionStoreConfiguration;
@@ -161,29 +162,31 @@ public class TransactionProcessor {
 
     //Resolve collateral fee for invalid transactions -- Required during parallel processing
     @EventListener
+    @Order(1)
     @Transactional
     public void handleCollateralFee(PreCommitEvent preCommitEvent) {
-        if (invalidUnresolvedFeeTxns.isEmpty())
-            return;
+        synchronized (invalidUnresolvedFeeTxns) {
+            if (invalidUnresolvedFeeTxns.isEmpty())
+                return;
 
-        try {
-            //Handle collateral fee
+            // Resolve the entire batch before any nullable fee can be persisted or published.
             for (var invalidTx : invalidUnresolvedFeeTxns) {
                 var fee = feeResolver.resolveFee(invalidTx._2);
-                if (fee == null) {
-                    log.error("Fee not found for transaction. Something is wrong : {}", invalidTx._2.getBody().getTxHash());
-                }
-
+                if (fee == null)
+                    throw new IllegalStateException("Collateral fee unresolved for transaction " + invalidTx._2.getTxHash());
                 invalidTx._1.setFee(fee);
-                transactionStorage.saveAll(List.of(invalidTx._1));
             }
 
-            if (invalidUnresolvedFeeTxns.size() > 0) {
-                //Publish txn event for invalid transactions
-                publisher.publishEvent(new TxnEvent(preCommitEvent.getMetadata(),
-                        invalidUnresolvedFeeTxns.stream().map(t -> t._1).toList()));
-            }
-        } finally {
+            var resolved = invalidUnresolvedFeeTxns.stream().map(t -> t._1).toList();
+            transactionStorage.saveAll(resolved);
+            publisher.publishEvent(new TxnEvent(preCommitEvent.getMetadata(), resolved));
+            invalidUnresolvedFeeTxns.clear();
+        }
+    }
+
+    @EventListener
+    public void discardPendingCollateralFees(RollbackEvent event) {
+        synchronized (invalidUnresolvedFeeTxns) {
             invalidUnresolvedFeeTxns.clear();
         }
     }

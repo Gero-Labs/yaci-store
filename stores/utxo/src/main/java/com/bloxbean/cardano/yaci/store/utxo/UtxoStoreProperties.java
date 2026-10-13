@@ -33,4 +33,12 @@ public class UtxoStoreProperties {
 
     @Builder.Default
     private boolean contentAwareRollback = false;
+
+    /** Maintain the complete current UTxO table at commit time. Existing stores require a backfill. */
+    @Builder.Default
+    private boolean unspentTableEnabled = false;
+
+    /** Read Blockfrost asset holders from the current table only after backfill and verification. */
+    @Builder.Default
+    private boolean unspentTableReadEnabled = false;
 }

@@ -5,6 +5,7 @@ import com.bloxbean.cardano.yaci.store.events.RollbackEvent;
 import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreProperties;
 import com.bloxbean.cardano.yaci.store.utxo.domain.UtxoRollbackEvent;
 import com.bloxbean.cardano.yaci.store.utxo.storage.UtxoStorage;
+import com.bloxbean.cardano.yaci.store.utxo.storage.impl.UnspentUtxoTableService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -22,11 +23,16 @@ public class UtxoRollbackProcessor {
     private final UtxoStorage utxoStorage;
     private final UtxoStoreProperties utxoStoreProperties;
     private final ApplicationEventPublisher publisher;
+    private final UnspentUtxoTableService unspentUtxoTableService;
 
     @EventListener
     @Transactional
     public void handleRollbackEvent(RollbackEvent rollbackEvent) {
         long rollBackToSlot = rollbackEvent.getRollbackTo().getSlot();
+
+        // The shared mutation lock stays held through the historical deletes in this transaction.
+        if (utxoStoreProperties.isUnspentTableEnabled())
+            unspentUtxoTableService.rollbackTo(rollBackToSlot);
 
         if (utxoStoreProperties.isContentAwareRollback()) {
             log.info("Rollback -- content aware rollback is enabled. Publishing UtxoRollbackEvent");

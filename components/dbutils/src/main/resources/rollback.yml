@@ -301,6 +301,14 @@ rollback:
         column: "epoch"
         operator: ">="
 
+    - name: "epoch_stake_total"
+      operation: "DELETE"
+      condition:
+        type: "epoch"
+        column: "epoch"
+        operator: ">="
+        offset: -1
+
     - name: "epoch_stake"
       operation: "DELETE"
       condition:

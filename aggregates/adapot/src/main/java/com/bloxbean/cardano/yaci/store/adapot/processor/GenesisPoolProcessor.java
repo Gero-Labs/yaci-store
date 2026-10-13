@@ -10,6 +10,7 @@ import com.bloxbean.cardano.yaci.core.model.certs.CertificateType;
 import com.bloxbean.cardano.yaci.core.util.HexUtil;
 import com.bloxbean.cardano.yaci.store.adapot.domain.EpochStake;
 import com.bloxbean.cardano.yaci.store.adapot.service.AdaPotService;
+import com.bloxbean.cardano.yaci.store.adapot.service.EpochStakeTotalService;
 import com.bloxbean.cardano.yaci.store.common.aspect.EnableIf;
 import com.bloxbean.cardano.yaci.store.common.config.StoreProperties;
 import com.bloxbean.cardano.yaci.store.core.configuration.GenesisConfig;
@@ -63,6 +64,7 @@ public class GenesisPoolProcessor {
     private final AdaPotService adaPotService;
     private final DSLContext dslContext;
     private final DepositParamService depositParamService;
+    private final EpochStakeTotalService epochStakeTotalService;
 
     @EventListener
     @Transactional
@@ -78,6 +80,10 @@ public class GenesisPoolProcessor {
         var poolParamsList = genesisStaking.getPools();
         if (poolParamsList == null)
             return;
+
+        // Keep the same lock order as CLI rollback and snapshot replacement:
+        // total-state mutex first, then all genesis pool/stake writes.
+        epochStakeTotalService.lock();
 
         String genesisTxHash = GENESIS_TX_HASH;
 
@@ -222,6 +228,8 @@ public class GenesisPoolProcessor {
         if (poolParamsList == null)
             return;
 
+        epochStakeTotalService.lock();
+
         List<GenesisStaking.Stake> stakes = genesisStaking.getStakes();
         if (stakes == null)
             stakes = List.of();
@@ -274,6 +282,7 @@ public class GenesisPoolProcessor {
                     }).toList();
 
             dslContext.batch(inserts).execute();
+            epochStakeTotalService.refreshCompletedSnapshot(genesisBlockEvent.getEpoch() - 1);
         }
 
         //calculate reward for epoch 0

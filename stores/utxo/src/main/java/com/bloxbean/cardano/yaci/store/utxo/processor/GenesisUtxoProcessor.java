@@ -10,6 +10,8 @@ import com.bloxbean.cardano.yaci.store.common.domain.Amt;
 import com.bloxbean.cardano.yaci.store.events.GenesisBalance;
 import com.bloxbean.cardano.yaci.store.events.GenesisBlockEvent;
 import com.bloxbean.cardano.yaci.store.utxo.storage.UtxoStorage;
+import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreProperties;
+import com.bloxbean.cardano.yaci.store.utxo.storage.impl.UnspentUtxoTableService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -28,6 +30,8 @@ import static com.bloxbean.cardano.yaci.store.utxo.UtxoStoreConfiguration.STORE_
 @Slf4j
 public class GenesisUtxoProcessor {
     private final UtxoStorage utxoStorage;
+    private final UtxoStoreProperties utxoStoreProperties;
+    private final UnspentUtxoTableService unspentUtxoTableService;
 
     @EventListener
     @Transactional
@@ -74,5 +78,7 @@ public class GenesisUtxoProcessor {
         }
 
         utxoStorage.saveUnspent(genesisUtxos);
+        if (utxoStoreProperties.isUnspentTableEnabled())
+            unspentUtxoTableService.applyCommit(genesisBlockEvent.getSlot(), genesisBlockEvent.getSlot());
     }
 }

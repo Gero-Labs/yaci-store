@@ -20,6 +20,11 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class RollbackService {
+    private static final long CURRENT_UTXO_MUTATION_LOCK = 0x594143495554584fL;
+    private static final String CURRENT_UTXO_COLUMNS = "tx_hash, output_index, slot, block_hash, epoch, lovelace_amount, amounts, "
+            + "data_hash, inline_datum, owner_addr, owner_addr_full, owner_stake_addr, owner_payment_credential, "
+            + "owner_stake_credential, script_ref, reference_script_hash, is_collateral_return, block, block_time, "
+            + "update_datetime, tx_index";
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final DatabaseUtils databaseUtils;
 
@@ -35,9 +40,19 @@ public class RollbackService {
             return Pair.of(new ArrayList<>(), false);
         }
 
+        if (databaseUtils.tableExists("epoch_stake_total_state")) {
+            // Serialize with snapshot replacement, backfill and batched pruning.
+            // This table is optional for deployments without the AdaPot store.
+            jdbcTemplate.queryForObject("SELECT id FROM epoch_stake_total_state WHERE id = 1 FOR UPDATE",
+                    new MapSqlParameterSource(), Integer.class);
+        }
+
+        boolean currentUtxoRollback = !context.isRollbackLedgerState() && requiresCurrentUtxoRollback(config);
         if (!context.isRollbackLedgerState()) {
-            rollbackCursor(rollbackBlock, eventPublisherId);
-            rollbackAccountConfig(rollbackBlock);
+            if (currentUtxoRollback)
+                rollbackCurrentUtxos(rollbackBlock.getSlot());
+            rollbackCursor(rollbackBlock, eventPublisherId, currentUtxoRollback);
+            rollbackAccountConfig(rollbackBlock, currentUtxoRollback);
         }
 
         var params = new MapSqlParameterSource();
@@ -91,6 +106,8 @@ public class RollbackService {
                 jdbcTemplate.update(sql, params);
             } catch (Exception e) {
                 log.error("Failed to execute rollback on table '{}': {}", tableName, e.getMessage());
+                if (currentUtxoRollback && ("address_utxo".equalsIgnoreCase(tableName) || "tx_input".equalsIgnoreCase(tableName)))
+                    throw new IllegalStateException("Current UTxO source rollback failed for " + tableName, e);
                 failedRollbackActions.add(new TableRollbackAction(tableName, sql));
             }
         }
@@ -99,6 +116,43 @@ public class RollbackService {
         return Pair.of(failedRollbackActions, rollbackSuccess);
     }
 
+
+
+    private boolean requiresCurrentUtxoRollback(RollbackConfig config) {
+        var outputs = config.getTables().stream().filter(table -> "address_utxo".equalsIgnoreCase(table.getName())).toList();
+        var spends = config.getTables().stream().filter(table -> "tx_input".equalsIgnoreCase(table.getName())).toList();
+        if ((outputs.isEmpty() && spends.isEmpty()) || !databaseUtils.tableExists("address_utxo_unspent"))
+            return false;
+        if (outputs.size() != 1 || spends.size() != 1)
+            throw new IllegalArgumentException("Current UTxO rollback requires both address_utxo and tx_input exactly once");
+        if (!isSourceSlotDelete(outputs.getFirst(), "slot") || !isSourceSlotDelete(spends.getFirst(), "spent_at_slot"))
+            throw new IllegalArgumentException("Current UTxO source tables require DELETE at the same slot boundary");
+        return true;
+    }
+
+    private boolean isSourceSlotDelete(RollbackConfig.TableRollbackDefinition table, String column) {
+        var condition = table.getCondition();
+        return "DELETE".equalsIgnoreCase(table.getOperation()) && condition != null
+                && "slot".equalsIgnoreCase(condition.getType()) && column.equalsIgnoreCase(condition.getColumn())
+                && ">".equals(condition.getOperator()) && (condition.getOffset() == null || condition.getOffset() == 0);
+    }
+
+    /** The transaction also owns the source deletes below, so a concurrent backfill cannot resurrect them. */
+    private void rollbackCurrentUtxos(long slot) {
+        var params = new MapSqlParameterSource().addValue("slot", slot);
+        var jdbc = jdbcTemplate.getJdbcTemplate();
+        var dbType = DatabaseUtils.getDbType(jdbc.getDataSource()).orElse(null);
+        if (dbType == DatabaseUtils.DbType.postgres)
+            jdbc.execute("select pg_advisory_xact_lock(" + CURRENT_UTXO_MUTATION_LOCK + ")");
+        jdbcTemplate.update("delete from address_utxo_unspent where slot > :slot", params);
+        String conflict = dbType == DatabaseUtils.DbType.postgres
+                ? " on conflict (output_index, tx_hash) do nothing" : "";
+        jdbcTemplate.update("insert into address_utxo_unspent (" + CURRENT_UTXO_COLUMNS + ") select " + CURRENT_UTXO_COLUMNS
+                + " from address_utxo a where a.slot <= :slot "
+                + "and exists(select 1 from tx_input i where i.tx_hash=a.tx_hash and i.output_index=a.output_index and i.spent_at_slot > :slot) "
+                + "and not exists(select 1 from address_utxo_unspent u where u.tx_hash=a.tx_hash and u.output_index=a.output_index)"
+                + conflict, params);
+    }
 
     private RollbackBlock getRollbackBlockByRollbackContext(RollbackContext context) {
         if (!databaseUtils.tableExists("block")) {
@@ -241,10 +295,11 @@ public class RollbackService {
         }
     }
 
-    private void rollbackCursor(RollbackBlock rollbackBlock, long eventPublisherId) {
-        String truncateCursor = "TRUNCATE TABLE cursor_";
-        log.info("Truncating cursor_ table: {}", truncateCursor);
-        jdbcTemplate.getJdbcTemplate().update(truncateCursor);
+    private void rollbackCursor(RollbackBlock rollbackBlock, long eventPublisherId, boolean transactionSafe) {
+        // TRUNCATE implicitly commits on H2/MySQL. Current and source restoration must stay atomic.
+        String clearCursor = transactionSafe ? "DELETE FROM cursor_" : "TRUNCATE TABLE cursor_";
+        log.info("Clearing cursor_ table: {}", clearCursor);
+        jdbcTemplate.getJdbcTemplate().update(clearCursor);
 
         String insertCursor =
                 "INSERT INTO cursor_ (id, block_hash, slot, block_number, era) " +
@@ -261,11 +316,11 @@ public class RollbackService {
         jdbcTemplate.update(insertCursor, params);
     }
 
-    private void rollbackAccountConfig(RollbackBlock rollbackBlock) {
+    private void rollbackAccountConfig(RollbackBlock rollbackBlock, boolean transactionSafe) {
         if (databaseUtils.tableExists("account_config")) {
 
-            String truncateAccCfg = "TRUNCATE TABLE account_config";
-            log.info("Truncating account_config: {}", truncateAccCfg);
+            String truncateAccCfg = transactionSafe ? "DELETE FROM account_config" : "TRUNCATE TABLE account_config";
+            log.info("Clearing account_config: {}", truncateAccCfg);
 
             jdbcTemplate.getJdbcTemplate().update(truncateAccCfg);
 

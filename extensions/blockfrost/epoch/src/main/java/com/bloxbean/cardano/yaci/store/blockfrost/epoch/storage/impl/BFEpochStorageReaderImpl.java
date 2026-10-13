@@ -8,6 +8,7 @@ import org.jooq.DSLContext;
 import org.jooq.Record;
 import org.jooq.SortField;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigInteger;
 import java.util.Collections;
@@ -18,12 +19,15 @@ import java.util.stream.Collectors;
 import static com.bloxbean.cardano.yaci.store.blocks.jooq.Tables.BLOCK;
 import static com.bloxbean.cardano.yaci.store.epoch_aggr.jooq.Tables.EPOCH;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE;
+import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE_TOTAL;
 import static org.jooq.impl.DSL.sum;
 
 @Component
 @RequiredArgsConstructor
 public class BFEpochStorageReaderImpl implements BFEpochStorageReader {
     private final DSLContext dsl;
+    @Value("${store.adapot.epoch-stake-totals-enabled:false}")
+    private boolean epochStakeTotalsEnabled;
 
     @Override
     public List<Epoch> findNextEpochs(int epoch, int page, int count) {
@@ -101,6 +105,19 @@ public class BFEpochStorageReaderImpl implements BFEpochStorageReader {
         List<Integer> snapshotEpochs = activeEpochs.stream()
                 .map(e -> e - 2)
                 .toList();
+
+        if (epochStakeTotalsEnabled) {
+            // Enabled only after the bounded background backfill is ready.
+            // Each total is committed with its snapshot. Do not fall back to
+            // a page-wide stake scan when a snapshot is absent or pruned.
+            return dsl.select(EPOCH_STAKE_TOTAL.EPOCH, EPOCH_STAKE_TOTAL.TOTAL)
+                    .from(EPOCH_STAKE_TOTAL)
+                    .where(EPOCH_STAKE_TOTAL.EPOCH.in(snapshotEpochs))
+                    .and(EPOCH_STAKE_TOTAL.TOTAL.isNotNull())
+                    .fetch().stream().collect(Collectors.toMap(
+                            r -> r.get(EPOCH_STAKE_TOTAL.EPOCH) + 2,
+                            r -> r.get(EPOCH_STAKE_TOTAL.TOTAL)));
+        }
 
         var totalStake = sum(EPOCH_STAKE.AMOUNT).cast(BigInteger.class).as("total_stake");
         return dsl.select(EPOCH_STAKE.EPOCH, totalStake)

@@ -38,6 +38,12 @@ public class UtxoStoreAutoConfigProperties {
          * Enable content aware rollback
          */
         private boolean contentAwareRollback = false;
+
+        /** Maintain address_utxo_unspent; enable before backfilling an existing store. */
+        private boolean unspentTableEnabled = false;
+
+        /** Serve Blockfrost asset holders from a complete, verified current UTxO table. */
+        private boolean unspentTableReadEnabled = false;
     }
 
     @Getter

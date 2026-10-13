@@ -24,6 +24,9 @@ import com.bloxbean.cardano.yaci.store.utxo.domain.PtrAddress;
 import com.bloxbean.cardano.yaci.store.utxo.domain.TxInputOutput;
 import com.bloxbean.cardano.yaci.store.utxo.storage.AddressStorage;
 import com.bloxbean.cardano.yaci.store.utxo.storage.UtxoStorage;
+import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreProperties;
+import com.bloxbean.cardano.yaci.store.utxo.storage.impl.UnspentUtxoTableService;
+import com.bloxbean.cardano.yaci.store.events.model.internal.BatchEvent;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +59,8 @@ public class UtxoProcessor {
     private final ApplicationEventPublisher publisher;
     private final StakingClient stakingClient;
     private final MeterRegistry meterRegistry;
+    private final UtxoStoreProperties utxoStoreProperties;
+    private final UnspentUtxoTableService unspentUtxoTableService;
 
     //List of utxos with pointer address. We need to fetch stake address for these in CommitEvent
     private List<Utxo> utxosWithPointerAddress = Collections.synchronizedList(new ArrayList<>());
@@ -260,6 +265,7 @@ public class UtxoProcessor {
      * @param commitEvent
      */
     @EventListener
+    @Transactional
     public void handleCommit(CommitEvent commitEvent) {
 
         try {
@@ -314,6 +320,19 @@ public class UtxoProcessor {
             }
 
             utxoStorage.handleCommit(commitEvent);
+            if (utxoStoreProperties.isUnspentTableEnabled()) {
+                long from = commitEvent.getMetadata().getSlot();
+                long to = from;
+                if (commitEvent.getBlockCaches() != null) {
+                    for (Object block : commitEvent.getBlockCaches()) {
+                        if (block instanceof BatchEvent batch && batch.getMetadata() != null) {
+                            from = Math.min(from, batch.getMetadata().getSlot());
+                            to = Math.max(to, batch.getMetadata().getSlot());
+                        }
+                    }
+                }
+                unspentUtxoTableService.applyCommit(from, to);
+            }
         }
     }
 }

@@ -6,3 +6,14 @@
       type: gin
       excludes:
         - mysql
+
+- table: address_utxo_unspent
+  indexes:
+    # Path/value hashing avoids policy_id-vs-unit collisions for empty asset names.
+    - name: idx_address_utxo_unspent_amounts
+      columns:
+        - amounts jsonb_path_ops
+      type: gin
+      excludes:
+        - mysql
+        - h2

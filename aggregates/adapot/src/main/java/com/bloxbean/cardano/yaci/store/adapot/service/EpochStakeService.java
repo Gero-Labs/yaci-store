@@ -13,14 +13,16 @@ import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE;
 public class EpochStakeService {
     private final DSLContext dsl;
     private final PlatformTransactionManager transactionManager;
+    private final EpochStakeTotalService epochStakeTotalService;
     private TransactionTemplate transactionTemplate;
 
     @Value("${store.adapot.epoch-stake-pruning-batch-size:3000}")
     private int pruningBatchSize = 3000;
 
-    public EpochStakeService(DSLContext dsl, PlatformTransactionManager transactionManager) {
+    public EpochStakeService(DSLContext dsl, PlatformTransactionManager transactionManager, EpochStakeTotalService epochStakeTotalService) {
         this.dsl = dsl;
         this.transactionManager = transactionManager;
+        this.epochStakeTotalService = epochStakeTotalService;
 
         init();
     }
@@ -37,12 +39,14 @@ public class EpochStakeService {
         int limit = pruningBatchSize;
 
         do {
-            count = transactionTemplate.execute(status ->
-                    dsl.deleteFrom(EPOCH_STAKE)
-                            .where(EPOCH_STAKE.EPOCH.lessThan(epoch))
-                            .limit(limit)
-                            .execute()
-            );
+            count = transactionTemplate.execute(status -> {
+                epochStakeTotalService.lock();
+                epochStakeTotalService.beginPruning(epoch);
+                return dsl.deleteFrom(EPOCH_STAKE)
+                        .where(EPOCH_STAKE.EPOCH.lessThan(epoch))
+                        .limit(limit)
+                        .execute();
+            });
 
             totalCount += count;
         } while (count > 0);

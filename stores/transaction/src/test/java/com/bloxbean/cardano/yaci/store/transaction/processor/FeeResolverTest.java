@@ -19,6 +19,7 @@ import java.util.Set;
 
 import static com.bloxbean.cardano.yaci.core.util.Constants.LOVELACE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 
@@ -87,9 +88,11 @@ public class FeeResolverTest {
         //Total inputs = 13000 lovelace
         given(utxoClient.getUtxosByIds(anyList())).willReturn(List.of(
                 AddressUtxo.builder()
+                        .txHash("tx1").outputIndex(0)
                         .ownerAddr("addr1")
                         .lovelaceAmount(new BigInteger("5000")).build(),
                 AddressUtxo.builder()
+                        .txHash("tx2").outputIndex(1)
                         .ownerAddr("addr1")
                         .lovelaceAmount(new BigInteger("8000"))
                        .build()
@@ -128,5 +131,51 @@ public class FeeResolverTest {
         BigInteger fee = feeResolver.resolveFee(transaction);
 
         assertEquals(new BigInteger("8000"), fee);
+    }
+
+    @Test
+    void nullCollateralLookupRemainsUnresolved() {
+        var transaction = invalidWithoutTotalCollateral();
+        given(utxoClient.getUtxosByIds(anyList())).willReturn(null);
+
+        assertNull(feeResolver.resolveFee(transaction));
+    }
+
+    @Test
+    void wrongCollateralOutpointDoesNotBecomeAnEffectiveFee() {
+        var transaction = invalidWithoutTotalCollateral();
+        given(utxoClient.getUtxosByIds(anyList())).willReturn(List.of(AddressUtxo.builder()
+                .txHash("different-input").outputIndex(0).lovelaceAmount(BigInteger.valueOf(9_000_000)).build()));
+
+        assertNull(feeResolver.resolveFee(transaction));
+    }
+
+    @Test
+    void duplicateCollateralOutpointDoesNotMaskMissingInput() {
+        var body = invalidWithoutTotalCollateral().getBody().toBuilder()
+                .collateralInputs(Set.of(new TransactionInput("requested-input", 0), new TransactionInput("other-input", 1)))
+                .build();
+        var input = AddressUtxo.builder().txHash("requested-input").outputIndex(0)
+                .lovelaceAmount(BigInteger.valueOf(9_000_000)).build();
+        given(utxoClient.getUtxosByIds(anyList())).willReturn(List.of(input, input));
+
+        assertNull(feeResolver.resolveFee(Transaction.builder().invalid(true).body(body).build()));
+    }
+
+    @Test
+    void collateralReturnCannotExceedResolvedInputs() {
+        var body = invalidWithoutTotalCollateral().getBody().toBuilder()
+                .collateralReturn(TransactionOutput.builder().amounts(List.of(Amount.builder()
+                        .unit(LOVELACE).quantity(BigInteger.valueOf(10_000_000)).build())).build()).build();
+        given(utxoClient.getUtxosByIds(anyList())).willReturn(List.of(AddressUtxo.builder()
+                .txHash("requested-input").outputIndex(0).lovelaceAmount(BigInteger.valueOf(9_000_000)).build()));
+
+        assertNull(feeResolver.resolveFee(Transaction.builder().invalid(true).body(body).build()));
+    }
+
+    private Transaction invalidWithoutTotalCollateral() {
+        return Transaction.builder().invalid(true).body(TransactionBody.builder().txHash("invalid")
+                .fee(BigInteger.valueOf(200_000)).collateralInputs(Set.of(new TransactionInput("requested-input", 0)))
+                .build()).build();
     }
 }

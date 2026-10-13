@@ -1,5 +1,8 @@
 import org.gradle.api.publish.maven.MavenPublication
 
+// Spring Boot 3.3's older BOM cannot connect to Docker Engine 29+.
+ext['testcontainers.version'] = '1.21.4'
+
 dependencies {
 
     api project(":extensions:blockfrost:blockfrost-common")
@@ -9,6 +12,10 @@ dependencies {
     api project(":stores:transaction")
 
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testRuntimeOnly 'org.postgresql:postgresql'
 }
 
 publishing {

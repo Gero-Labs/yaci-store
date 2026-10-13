@@ -1,3 +1,6 @@
+// Testcontainers 1.19 from the Boot BOM cannot use Docker Engine 29.
+ext['testcontainers.version'] = '1.21.4'
+
 dependencies {
     api project(":components:core")
     api project(":stores:epoch")
@@ -33,6 +36,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-web'
 
     testRuntimeOnly 'org.postgresql:postgresql:42.7.1'
+    testRuntimeOnly 'com.h2database:h2'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
 
 publishing {

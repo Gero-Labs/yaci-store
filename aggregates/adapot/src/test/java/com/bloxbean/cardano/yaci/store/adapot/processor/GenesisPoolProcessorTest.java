@@ -67,6 +67,8 @@ class GenesisPoolProcessorTest {
     private DSLContext dslContext;
     @Mock
     private DepositParamService depositParamService;
+    @Mock
+    private com.bloxbean.cardano.yaci.store.adapot.service.EpochStakeTotalService epochStakeTotalService;
 
     @InjectMocks
     private GenesisPoolProcessor genesisPoolProcessor;

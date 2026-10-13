@@ -4,6 +4,7 @@ import com.bloxbean.cardano.yaci.core.protocol.chainsync.messages.Point;
 import com.bloxbean.cardano.yaci.store.blocks.BlocksStoreProperties;
 import com.bloxbean.cardano.yaci.store.blocks.storage.BlockCborStorage;
 import com.bloxbean.cardano.yaci.store.blocks.storage.BlockStorage;
+import com.bloxbean.cardano.yaci.store.client.utxo.UtxoClient;
 import com.bloxbean.cardano.yaci.store.events.RollbackEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,8 @@ class BlockRollbackProcessorTest {
     private BlockCborStorage blockCborStorage;
     @Mock
     private BlocksStoreProperties blocksStoreProperties;
+    @Mock
+    private UtxoClient utxoClient;
 
     @InjectMocks
     private BlockProcessor blockProcessor;

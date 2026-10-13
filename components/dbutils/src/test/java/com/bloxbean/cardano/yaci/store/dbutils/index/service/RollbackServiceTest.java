@@ -81,9 +81,9 @@ class RollbackServiceTest {
         verify(jdbcTemplate, times(1)).update(eq("DELETE FROM drep_pv9_stale_clear_event_cache WHERE pv9_max_epoch >= :epoch"), any(SqlParameterSource.class));
         verify(jdbcTemplate, times(1)).update(eq("DELETE FROM drep_pv9_stale_clear_event WHERE pv9_max_epoch >= :epoch"), any(SqlParameterSource.class));
 
-        verify(plainJdbcTemplate, times(1)).update(contains("TRUNCATE TABLE cursor_"));
+        verify(plainJdbcTemplate, times(1)).update(eq("DELETE FROM cursor_"));
         verify(jdbcTemplate, times(1)).update(contains("INSERT INTO cursor_"), any(SqlParameterSource.class));
-        verify(plainJdbcTemplate, times(1)).update(contains("TRUNCATE TABLE account_config"));
+        verify(plainJdbcTemplate, times(1)).update(eq("DELETE FROM account_config"));
         verify(jdbcTemplate, times(1)).update(contains("INSERT INTO account_config"), any(SqlParameterSource.class));
     }
 
@@ -463,7 +463,7 @@ class RollbackServiceTest {
         assertTrue(result.getSecond());
 
         // Verify cursor_ was updated but account_config was not
-        verify(plainJdbcTemplate, times(1)).update(contains("TRUNCATE TABLE cursor_"));
+        verify(plainJdbcTemplate, times(1)).update(eq("DELETE FROM cursor_"));
         verify(jdbcTemplate, times(1)).update(contains("INSERT INTO cursor_"), any(SqlParameterSource.class));
         verify(plainJdbcTemplate, never()).update(contains("TRUNCATE TABLE account_config"));
         verify(jdbcTemplate, never()).update(contains("INSERT INTO account_config"), any(SqlParameterSource.class));

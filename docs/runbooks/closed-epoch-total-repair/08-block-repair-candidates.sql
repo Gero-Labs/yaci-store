@@ -9,7 +9,7 @@ SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
 WITH b AS MATERIALIZED (
- SELECT hash, number, slot, epoch, no_of_txs, total_fees, total_output
+ SELECT hash, number, slot, epoch, block_time, no_of_txs, total_fees, total_output
  FROM yaci_store.block WHERE epoch = :e AND slot BETWEEN :s0 AND :s1
 ), t AS MATERIALIZED (
  SELECT tx_hash, block_hash, block, slot, epoch, tx_index, invalid, fee, outputs, collateral_return_json
@@ -33,6 +33,45 @@ WITH b AS MATERIALIZED (
  UNION ALL
  SELECT ins.* FROM scope_transactions ts JOIN yaci_store.invalid_transaction ins ON ins.tx_hash=ts.tx_hash
  WHERE (ins.slot BETWEEN :s0 AND :s1) IS NOT TRUE
+), scope_tx_counts AS (
+ SELECT b.hash, b.no_of_txs, count(ts.tx_hash) AS tx_rows, count(DISTINCT ts.tx_index) AS distinct_indexes,
+        min(ts.tx_index) AS first_index, max(ts.tx_index) AS last_index
+ FROM b LEFT JOIN scope_transactions ts ON ts.block_hash=b.hash GROUP BY b.hash,b.no_of_txs
+), scope_output_counts AS (
+ SELECT ts.tx_hash, count(us.tx_hash) AS output_rows,
+   CASE WHEN ts.invalid IS FALSE AND jsonb_typeof(ts.outputs)='array' THEN jsonb_array_length(ts.outputs)
+        WHEN ts.invalid IS TRUE AND (ts.collateral_return_json IS NULL OR ts.collateral_return_json='null'::jsonb) THEN 0
+        WHEN ts.invalid IS TRUE AND jsonb_typeof(ts.collateral_return_json)='object' THEN 1 END AS expected_outputs
+ FROM scope_transactions ts LEFT JOIN scope_outputs us ON us.tx_hash=ts.tx_hash
+ GROUP BY ts.tx_hash,ts.invalid,ts.outputs,ts.collateral_return_json
+), scope_validation AS MATERIALIZED (
+ SELECT
+   (SELECT count(*) FROM scope_transactions ts LEFT JOIN b ON b.hash=ts.block_hash
+     WHERE b.hash IS NULL OR ts.epoch IS DISTINCT FROM b.epoch OR ts.slot IS DISTINCT FROM b.slot
+       OR ts.block IS DISTINCT FROM b.number OR ts.block_time IS DISTINCT FROM b.block_time
+       OR ts.fee IS NULL OR ts.fee < 0 OR ts.invalid IS NULL OR ts.tx_index IS NULL
+       OR jsonb_typeof(ts.outputs) IS DISTINCT FROM 'array')
+ + (SELECT count(*) FROM scope_tx_counts WHERE tx_rows IS DISTINCT FROM no_of_txs
+       OR distinct_indexes IS DISTINCT FROM no_of_txs
+       OR (no_of_txs > 0 AND (first_index IS DISTINCT FROM 0 OR last_index IS DISTINCT FROM no_of_txs-1)))
+ + (SELECT count(*) FROM scope_outputs us LEFT JOIN scope_transactions ts ON ts.tx_hash=us.tx_hash
+     LEFT JOIN b ON b.hash=ts.block_hash
+     WHERE ts.tx_hash IS NULL OR b.hash IS NULL OR us.lovelace_amount IS NULL OR us.lovelace_amount < 0
+       OR us.epoch IS DISTINCT FROM b.epoch OR us.slot IS DISTINCT FROM b.slot
+       OR us.block IS DISTINCT FROM b.number OR us.block_time IS DISTINCT FROM b.block_time
+       OR us.block_hash IS DISTINCT FROM b.hash
+       OR (ts.invalid IS TRUE AND (us.is_collateral_return IS NOT TRUE
+          OR us.output_index IS DISTINCT FROM CASE WHEN jsonb_typeof(ts.outputs)='array' THEN jsonb_array_length(ts.outputs) END))
+       OR (ts.invalid IS FALSE AND (us.is_collateral_return IS TRUE OR us.output_index IS NULL OR us.output_index < 0
+          OR us.output_index >= CASE WHEN jsonb_typeof(ts.outputs)='array' THEN jsonb_array_length(ts.outputs) END)))
+ + (SELECT count(*) FROM scope_output_counts WHERE expected_outputs IS NULL OR output_rows IS DISTINCT FROM expected_outputs)
+ + (SELECT count(*) FROM scope_logs ins LEFT JOIN scope_transactions ts ON ts.tx_hash=ins.tx_hash
+     LEFT JOIN b ON b.hash=ts.block_hash
+     WHERE ts.tx_hash IS NULL OR ts.invalid IS NOT TRUE OR b.hash IS NULL
+       OR ins.slot IS DISTINCT FROM b.slot OR ins.block_hash IS DISTINCT FROM b.hash)
+ + (SELECT count(*) FROM scope_transactions ts LEFT JOIN scope_logs ins ON ins.tx_hash=ts.tx_hash
+     WHERE ts.invalid IS TRUE AND ins.tx_hash IS NULL)
+ AS scope_errors
 ), scope_proof AS MATERIALIZED (
  SELECT md5(jsonb_build_object(
    'blocks', coalesce((SELECT jsonb_agg(to_jsonb(bs) ORDER BY bs.number,bs.hash)
@@ -74,7 +113,7 @@ SELECT b.hash, b.number, b.slot, b.epoch, b.no_of_txs,
        b.total_fees AS original_fee, b.total_output AS original_output,
        tt.effective_fee AS candidate_fee, coalesce(ot.applied_output,0) AS candidate_output,
        tt.invalid_transactions, tt.transaction_digest, coalesce(ot.output_digest,md5('')) AS output_digest,
-       proof.source_digest, scope_proof.scope_digest,
+       proof.source_digest, scope_proof.scope_digest, scope_validation.scope_errors,
        tt.transaction_errors, coalesce(ot.output_errors,0) AS output_errors,
        tt.transaction_rows <> b.no_of_txs OR tt.distinct_indexes <> b.no_of_txs
          OR tt.first_index <> 0 OR tt.last_index <> b.no_of_txs - 1 AS transaction_count_error,
@@ -84,6 +123,7 @@ SELECT b.hash, b.number, b.slot, b.epoch, b.no_of_txs,
 FROM b JOIN tx_totals tt ON tt.block_hash = b.hash
 LEFT JOIN output_totals ot ON ot.block_hash = b.hash
 CROSS JOIN scope_proof
+CROSS JOIN scope_validation
 CROSS JOIN LATERAL (
  SELECT md5(jsonb_build_object(
    'block', (SELECT to_jsonb(bs) FROM yaci_store.block bs WHERE bs.hash=b.hash),

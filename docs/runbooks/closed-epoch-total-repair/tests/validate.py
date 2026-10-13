@@ -157,11 +157,11 @@ def reset():
 def snapshot():
     return json.loads(scalar("SELECT jsonb_build_object('blocks',(SELECT jsonb_agg(to_jsonb(b)-'create_datetime'-'update_datetime' ORDER BY number) FROM yaci_store.block b),'epochs',(SELECT jsonb_agg(to_jsonb(e)-'create_datetime'-'update_datetime' ORDER BY number) FROM yaci_store.epoch e),'backup_schema',to_regnamespace('bfcompat_epoch_repair_20261013') IS NOT NULL);"))
 
-def candidates(label='candidates'):
+def candidates(label='candidates', expected_count=3):
     r = execute('08-block-repair-candidates.sql', {'e':633, 's0':1000, 's1':1080}, label)
     assert r.returncode == 0, r.stderr
     names = ['hash','number','slot','epoch','no_of_txs','original_fee','original_output','candidate_fee','candidate_output',
-             'invalid_transactions','transaction_digest','output_digest','source_digest','scope_digest','transaction_errors','output_errors',
+             'invalid_transactions','transaction_digest','output_digest','source_digest','scope_digest','scope_errors','transaction_errors','output_errors',
              'transaction_count_error','output_count_error','needs_repair']
     rows=[]
     for line in r.stdout.splitlines():
@@ -174,7 +174,8 @@ def candidates(label='candidates'):
             elif row[k] in ['t','f']: row[k]=(row[k]=='t')
             else: row[k]=int(Decimal(row[k]))
         rows.append(row)
-    assert len(rows)==3, rows
+    if expected_count is not None:
+        assert len(rows)==expected_count, rows
     return rows
 
 def apply_blocks(rows, label, **vars):
@@ -214,6 +215,25 @@ def defect_blocks(name, mutation, proof_name, expected_field):
     proof=execute(proof_name,{'e':633,'s0':1000,'s1':1080},name+'-postproof')
     record(name, r.returncode!=0, {'actual_accepted':r.returncode==0,'postproof_stdout':proof.stdout.strip(),
                                  'expected_refusal_for':expected_field}, defect=r.returncode==0)
+
+def seeded_before_review_refusal(name, mutation):
+    reset()
+    seeded=psql(mutation); assert seeded.returncode==0,seeded.stderr
+    before=snapshot()
+    rows=candidates(name+'-candidate', expected_count=None)
+    proof=execute('04-yaci-applied-output-window.sql',{'e':633,'s0':1000,'s1':1080},name+'-output-proof')
+    r=apply_blocks(rows,name+'-apply')
+    output_row=next(line.split('|') for line in proof.stdout.splitlines() if len(line.split('|'))==13)
+    record(name,r.returncode!=0 and snapshot()==before and any(row.get('scope_errors',0)>0 for row in rows),
+           {'exit_code':r.returncode,'stderr':r.stderr,'candidates':rows,'output_proof':proof.stdout},defect=r.returncode==0)
+    if 'linked-output' in name:
+        record(name+'-full-output-proof-detects',any(value!='0' for value in output_row[6:]),output_row)
+
+def seeded_collateral_body_proof(name, mutation):
+    reset(); seeded=psql(mutation); assert seeded.returncode==0,seeded.stderr
+    result=execute('06-yaci-invalid-semantics-window.sql',{'e':633,'s0':1000,'s1':1080},name)
+    row=next(line.split('|') for line in result.stdout.splitlines() if len(line.split('|'))==22)
+    record(name,result.returncode==0 and int(row[6])>0,{'proof':row},defect=int(row[6])==0)
 
 def start_holder(sql):
     tag='epoch-clone-lock-holder'
@@ -293,7 +313,9 @@ def main():
                and utxo[5]==dbsync[5]=='23000000' and all(x=='0' for x in yaci[9:])
                and all(x=='0' for x in utxo[6:]),{'yaci':yaci,'outputs':utxo,'dbsync':dbsync})
         proof=execute('06-yaci-invalid-semantics-window.sql',{'e':633,'s0':1000,'s1':1080},'baseline-invalid-semantics')
-        record('invalid-babbage-alonzo-source-semantics-query-executes',proof.returncode==0,proof.stdout)
+        semantics=output_row(proof,22)
+        record('invalid-babbage-alonzo-source-semantics-proven',proof.returncode==0 and semantics[3]=='3'
+               and all(value=='0' for value in semantics[4:15]) and semantics[15:] == ['12400000','201000000','13000000','600000','13000000','209000000','8000000'],proof.stdout)
         r=apply_blocks(rows,'success-blocks')
         record('reviewed-block-repair-success',r.returncode==0 and scalar('SELECT count(*) FROM bfcompat_epoch_repair_20261013.block_before;')=='2',r.stderr)
         row=epoch_manifest(); (ROOT/'baseline-reviewed-epoch.json').write_text(json.dumps([row],indent=2)+'\n')
@@ -342,6 +364,14 @@ def main():
         refusal('refuse-entirely-orphan-zero-output-in-window',mutation="INSERT INTO yaci_store.address_utxo(tx_hash,output_index,block_hash,block,slot,epoch,block_time,lovelace_amount,is_collateral_return) VALUES('orphan',0,'wrong-block',101,1020,633,10020,0,FALSE);")
         refusal('refuse-output-outside-window-for-canonical-transaction',mutation=f"INSERT INTO yaci_store.address_utxo(tx_hash,output_index,block_hash,block,slot,epoch,block_time,lovelace_amount,is_collateral_return) VALUES('{h('invalid-babbage')}',9,'wrong-block',101,5000,633,10020,0,FALSE);")
         refusal('refuse-entirely-orphan-invalid-log-in-window',mutation="INSERT INTO yaci_store.invalid_transaction(tx_hash,slot,block_hash,transaction) VALUES('orphan-log',1020,'wrong-block','{}'::jsonb);")
+        seeded_before_review_refusal('refuse-malformed-linked-output-seeded-before-candidate',f"INSERT INTO yaci_store.address_utxo(tx_hash,output_index,block_hash,block,slot,epoch,block_time,lovelace_amount,is_collateral_return) VALUES('{h('invalid-babbage')}',9,'wrong-block',101,5000,633,10020,0,FALSE);")
+        seeded_before_review_refusal('refuse-linked-output-null-slot-seeded-before-candidate',f"INSERT INTO yaci_store.address_utxo(tx_hash,output_index,block_hash,block,slot,epoch,block_time,lovelace_amount,is_collateral_return) VALUES('{h('invalid-babbage')}',9,'wrong-block',101,NULL,633,10020,0,FALSE);")
+        seeded_before_review_refusal('refuse-canonical-linked-tx-metadata-seeded-before-candidate',f"UPDATE yaci_store.transaction SET block_time=block_time+1 WHERE tx_hash='{h('invalid-babbage')}';")
+        seeded_before_review_refusal('refuse-outside-slot-canonical-tx-seeded-before-candidate',f"UPDATE yaci_store.transaction SET slot=5000 WHERE tx_hash='{h('invalid-babbage')}';")
+        seeded_before_review_refusal('refuse-orphan-wrong-epoch-transaction-seeded-before-candidate',"INSERT INTO yaci_store.transaction(tx_hash,block_hash,block,slot,epoch,block_time,tx_index,invalid,fee,outputs) VALUES('orphan-tx','wrong-block',101,1020,632,10020,0,FALSE,0,'[]'::jsonb);")
+        seeded_before_review_refusal('refuse-malformed-valid-only-linked-output-seeded-before-candidate',f"INSERT INTO yaci_store.address_utxo(tx_hash,output_index,block_hash,block,slot,epoch,block_time,lovelace_amount,is_collateral_return) VALUES('{h('valid-a')}',9,'wrong-block',100,5000,633,10000,0,FALSE);")
+        seeded_collateral_body_proof('positive-body-collateral-cannot-bind-to-null-stored-value',f"UPDATE yaci_store.invalid_transaction SET transaction=jsonb_set(transaction,'{{body,totalCollateral}}','1'::jsonb) WHERE tx_hash='{h('invalid-alonzo')}';")
+        refusal('refuse-historical-collateral-input-change-outside-window',mutation=f"UPDATE yaci_store.address_utxo SET lovelace_amount=lovelace_amount+1 WHERE tx_hash='{h('collateral-a')}';")
         reset(); rows=candidates('epoch-fraction-before'); apply_blocks(rows,'epoch-fraction-setup'); row=epoch_manifest()
         row['candidate_output']=row['candidate_output']+0.5
         r=apply_epoch(row,'refuse-fractional-epoch-output-manifest')

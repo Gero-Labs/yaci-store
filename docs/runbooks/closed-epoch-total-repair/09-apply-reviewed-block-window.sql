@@ -13,7 +13,7 @@ CREATE TEMP TABLE reviewed_epoch_block_patch ON COMMIT DROP AS
 SELECT * FROM jsonb_to_recordset(:'reviewed_json'::jsonb) AS x(
   hash text, number bigint, slot bigint, epoch integer, no_of_txs integer,
   original_fee numeric, original_output numeric, candidate_fee numeric, candidate_output numeric,
-  invalid_transactions bigint, transaction_digest text, output_digest text, source_digest text, scope_digest text,
+  invalid_transactions bigint, transaction_digest text, output_digest text, source_digest text, scope_digest text, scope_errors bigint,
   transaction_errors bigint, output_errors bigint, transaction_count_error boolean,
   output_count_error boolean, needs_repair boolean);
 ALTER TABLE reviewed_epoch_block_patch ADD PRIMARY KEY(hash);
@@ -38,6 +38,7 @@ BEGIN
             WHERE p.epoch IS DISTINCT FROM w.epoch OR p.slot NOT BETWEEN w.s0 AND w.s1
               OR p.invalid_transactions IS NULL OR p.invalid_transactions <= 0
               OR p.transaction_errors IS DISTINCT FROM 0 OR p.output_errors IS DISTINCT FROM 0
+              OR p.scope_errors IS DISTINCT FROM 0
               OR p.transaction_count_error IS DISTINCT FROM false OR p.output_count_error IS DISTINCT FROM false
               OR p.hash IS NULL OR p.number IS NULL OR p.slot IS NULL OR p.no_of_txs IS NULL
               OR p.original_fee IS NULL OR p.original_output IS NULL OR p.candidate_fee IS NULL OR p.candidate_output IS NULL

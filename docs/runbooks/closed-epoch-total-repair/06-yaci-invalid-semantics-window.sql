@@ -84,10 +84,13 @@ SELECT :e::integer AS epoch, :s0::bigint AS first_slot, :s1::bigint AS last_slot
        count(*) FILTER (WHERE declared_fee IS NULL OR jsonb_typeof(body->'outputs') IS DISTINCT FROM 'array'
                          OR malformed_outputs > 0 OR log_invalid IS DISTINCT FROM 'true'
                          OR body_tx_hash IS DISTINCT FROM tx_hash) AS unproved_declared_body,
-       count(*) FILTER (WHERE total_collateral > 0 AND
-                         (body_total_collateral_text IS NULL OR body_total_collateral_text !~ '^[0-9]+$'
-                          OR CASE WHEN body_total_collateral_text ~ '^[0-9]+$'
-                                  THEN body_total_collateral_text::numeric END IS DISTINCT FROM total_collateral::numeric)) AS total_collateral_body_mismatches,
+       count(*) FILTER (WHERE
+         (body_total_collateral_text IS NOT NULL AND body_total_collateral_text !~ '^[0-9]+$')
+         OR ((total_collateral > 0 OR CASE WHEN body_total_collateral_text ~ '^[0-9]+$'
+                     THEN body_total_collateral_text::numeric > 0 ELSE false END)
+             AND CASE WHEN body_total_collateral_text ~ '^[0-9]+$'
+                     THEN body_total_collateral_text::numeric END IS DISTINCT FROM total_collateral::numeric)
+       ) AS total_collateral_body_mismatches,
        count(*) FILTER (WHERE jsonb_typeof(collateral_inputs) IS DISTINCT FROM 'array' OR requested_inputs = 0
                          OR requested_inputs <> found_inputs OR malformed_keys > 0 OR bad_input_values > 0
                          OR duplicate_inputs > 0) AS incomplete_collateral_inputs,

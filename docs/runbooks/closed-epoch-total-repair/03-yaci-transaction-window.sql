@@ -8,16 +8,20 @@ SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
 WITH b AS MATERIALIZED (
- SELECT hash, number, slot, block_time, no_of_txs
+ SELECT hash, number, slot, epoch, block_time, no_of_txs
  FROM yaci_store.block WHERE epoch = :e AND slot BETWEEN :s0 AND :s1
 ), t AS MATERIALIZED (
  SELECT tx_hash, block_hash, block, slot, block_time, epoch, tx_index, invalid, fee
- FROM yaci_store.transaction WHERE epoch = :e AND slot BETWEEN :s0 AND :s1
+ FROM yaci_store.transaction WHERE slot BETWEEN :s0 AND :s1
+ UNION ALL
+ SELECT ts.tx_hash, ts.block_hash, ts.block, ts.slot, ts.block_time, ts.epoch, ts.tx_index, ts.invalid, ts.fee
+ FROM b JOIN yaci_store.transaction ts ON ts.block_hash=b.hash
+ WHERE (ts.slot BETWEEN :s0 AND :s1) IS NOT TRUE
 ), per_block AS (
  SELECT b.hash, b.number, b.no_of_txs,
         count(t.tx_hash) AS stored_tx_count, count(DISTINCT t.tx_index) AS distinct_tx_indexes,
         min(t.tx_index) AS first_tx_index, max(t.tx_index) AS last_tx_index,
-        count(t.tx_hash) FILTER (WHERE t.block IS DISTINCT FROM b.number OR t.slot IS DISTINCT FROM b.slot
+        count(t.tx_hash) FILTER (WHERE t.block IS DISTINCT FROM b.number OR t.slot IS DISTINCT FROM b.slot OR t.epoch IS DISTINCT FROM b.epoch
                                   OR t.block_time IS DISTINCT FROM b.block_time) AS bad_metadata,
         count(t.tx_hash) FILTER (WHERE t.fee IS NULL OR t.invalid IS NULL OR t.tx_index IS NULL) AS null_tx_fields,
         count(t.tx_hash) FILTER (WHERE t.fee < 0) AS negative_fees

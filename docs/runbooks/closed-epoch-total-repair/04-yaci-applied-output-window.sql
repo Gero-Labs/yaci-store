@@ -7,13 +7,25 @@ BEGIN READ ONLY;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
-WITH t AS MATERIALIZED (
+WITH b AS MATERIALIZED (
+ SELECT hash FROM yaci_store.block WHERE epoch=:e AND slot BETWEEN :s0 AND :s1
+), t AS MATERIALIZED (
  SELECT tx_hash, block_hash, block, slot, block_time, epoch, invalid, collateral_return_json,
         CASE WHEN jsonb_typeof(outputs) = 'array' THEN jsonb_array_length(outputs) END AS body_output_count
- FROM yaci_store.transaction WHERE epoch = :e AND slot BETWEEN :s0 AND :s1
+ FROM yaci_store.transaction WHERE slot BETWEEN :s0 AND :s1
+ UNION ALL
+ SELECT ts.tx_hash, ts.block_hash, ts.block, ts.slot, ts.block_time, ts.epoch, ts.invalid, ts.collateral_return_json,
+        CASE WHEN jsonb_typeof(ts.outputs)='array' THEN jsonb_array_length(ts.outputs) END AS body_output_count
+ FROM b JOIN yaci_store.transaction ts ON ts.block_hash=b.hash
+ WHERE (ts.slot BETWEEN :s0 AND :s1) IS NOT TRUE
 ), u AS MATERIALIZED (
  SELECT tx_hash, output_index, block_hash, block, slot, block_time, epoch, is_collateral_return, lovelace_amount
  FROM yaci_store.address_utxo WHERE slot BETWEEN :s0 AND :s1
+ UNION ALL
+ SELECT us.tx_hash, us.output_index, us.block_hash, us.block, us.slot, us.block_time, us.epoch,
+        us.is_collateral_return, us.lovelace_amount
+ FROM t JOIN yaci_store.address_utxo us ON us.tx_hash=t.tx_hash
+ WHERE (us.slot BETWEEN :s0 AND :s1) IS NOT TRUE
 ), per_tx AS (
  SELECT t.tx_hash, t.invalid,
         CASE WHEN t.invalid IS FALSE THEN t.body_output_count

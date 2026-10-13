@@ -29,13 +29,21 @@ reenable reads from a partial fill or a recent-tip-only check.
 
 ## Stage code and maintenance
 
-1. Confirm the target database has not applied another `V0_200_3` migration. Use the
-   normal deployment workflow to deploy the release with
-   `store.utxo.unspent-table-enabled=true` and
-   `store.utxo.unspent-table-read-enabled=false` in its durable configuration.
-2. Verify the actual running image and these properties. Confirm the new migration
-   created `address_utxo_unspent`, and commits are adding/removing rows while the
-   indexer continues advancing. The migration alone does not populate history.
+1. Confirm the target database has not applied another `V0_200_3` migration.
+   Build and verify the Gero production image using
+   `docs/runbooks/gero-production-blockfrost-backports.md`, preserving the patched
+   nested Yaci core. Production manifests live in `Gero-Labs/nexus/k8s/yaci`;
+   Nexus's deployment workflow applies only `k8s/prod`, and the Yaci tag workflow
+   publishes upstream Docker Hub artifacts. Neither deploys these StatefulSets.
+   Persist the pinned image and flags, review live drift, and explicitly roll out
+   each approved network in preview, preprod, mainnet order.
+2. Stage the image with maintenance and current reads both false, and disable
+   epoch-total background backfill for this schema-only stage. Verify the actual
+   image and mounted properties, then prove the newly migrated
+   `address_utxo_unspent` is empty. Enable maintenance with current reads still
+   false in the durable ConfigMap, apply the reviewed configuration and restart
+   the StatefulSet. Verify commits add/remove rows while the indexer advances.
+   The migration alone does not populate history.
 3. Apply the existing optional extra indexes to the new empty/current table before
    backfill. PostgreSQL requires
    `idx_address_utxo_unspent_amounts USING gin (amounts jsonb_path_ops)`.
@@ -89,9 +97,10 @@ Run the current-table holder SQL directly first. A stable successful query insid
 the existing endpoint budget is required; smaller storage or local tests alone do
 not establish availability. Only after full backfill, reconciliation, membership
 and body parity pass, set `store.utxo.unspent-table-read-enabled=true` in the durable
-manifest and deploy normally. Recheck the exact Nexus endpoints after the running
+manifest and explicitly apply the approved ConfigMap and restart its StatefulSet.
+Recheck the exact Nexus endpoints after the running
 image/config changes. Preserve unavailable Blockfrost references as such.
 
-If acceptance fails, set the read flag false through the normal configuration
-workflow while leaving maintenance on. This keeps the current table warm for
+If acceptance fails, persist and apply the read flag false and restart the
+StatefulSet while leaving maintenance on. This keeps the current table warm for
 diagnosis. The historical source remains available throughout.

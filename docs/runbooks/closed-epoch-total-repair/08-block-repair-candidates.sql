@@ -17,6 +17,33 @@ WITH b AS MATERIALIZED (
 ), u AS MATERIALIZED (
  SELECT tx_hash, output_index, block_hash, block, slot, epoch, is_collateral_return, lovelace_amount
  FROM yaci_store.address_utxo WHERE slot BETWEEN :s0 AND :s1
+), scope_transactions AS MATERIALIZED (
+ SELECT ts.* FROM yaci_store.transaction ts
+ WHERE ts.slot BETWEEN :s0 AND :s1
+ UNION ALL
+ SELECT ts.* FROM b JOIN yaci_store.transaction ts ON ts.block_hash=b.hash
+ WHERE (ts.slot BETWEEN :s0 AND :s1) IS NOT TRUE
+), scope_outputs AS MATERIALIZED (
+ SELECT us.* FROM yaci_store.address_utxo us WHERE us.slot BETWEEN :s0 AND :s1
+ UNION ALL
+ SELECT us.* FROM scope_transactions ts JOIN yaci_store.address_utxo us ON us.tx_hash=ts.tx_hash
+ WHERE (us.slot BETWEEN :s0 AND :s1) IS NOT TRUE
+), scope_logs AS MATERIALIZED (
+ SELECT ins.* FROM yaci_store.invalid_transaction ins WHERE ins.slot BETWEEN :s0 AND :s1
+ UNION ALL
+ SELECT ins.* FROM scope_transactions ts JOIN yaci_store.invalid_transaction ins ON ins.tx_hash=ts.tx_hash
+ WHERE (ins.slot BETWEEN :s0 AND :s1) IS NOT TRUE
+), scope_proof AS MATERIALIZED (
+ SELECT md5(jsonb_build_object(
+   'blocks', coalesce((SELECT jsonb_agg(to_jsonb(bs) ORDER BY bs.number,bs.hash)
+      FROM yaci_store.block bs WHERE bs.slot BETWEEN :s0 AND :s1),'[]'::jsonb),
+   'transactions', coalesce((SELECT jsonb_agg(to_jsonb(ts) ORDER BY ts.tx_hash)
+      FROM scope_transactions ts),'[]'::jsonb),
+   'outputs', coalesce((SELECT jsonb_agg(to_jsonb(us) ORDER BY us.tx_hash,us.output_index)
+      FROM scope_outputs us),'[]'::jsonb),
+   'invalid_logs', coalesce((SELECT jsonb_agg(to_jsonb(ins) ORDER BY ins.tx_hash)
+      FROM scope_logs ins),'[]'::jsonb)
+ )::text) AS scope_digest
 ), tx_totals AS (
  SELECT t.block_hash, count(*) AS transaction_rows, count(*) FILTER (WHERE t.invalid IS TRUE) AS invalid_transactions,
         sum(t.fee)::numeric AS effective_fee,
@@ -47,6 +74,7 @@ SELECT b.hash, b.number, b.slot, b.epoch, b.no_of_txs,
        b.total_fees AS original_fee, b.total_output AS original_output,
        tt.effective_fee AS candidate_fee, coalesce(ot.applied_output,0) AS candidate_output,
        tt.invalid_transactions, tt.transaction_digest, coalesce(ot.output_digest,md5('')) AS output_digest,
+       proof.source_digest, scope_proof.scope_digest,
        tt.transaction_errors, coalesce(ot.output_errors,0) AS output_errors,
        tt.transaction_rows <> b.no_of_txs OR tt.distinct_indexes <> b.no_of_txs
          OR tt.first_index <> 0 OR tt.last_index <> b.no_of_txs - 1 AS transaction_count_error,
@@ -55,6 +83,36 @@ SELECT b.hash, b.number, b.slot, b.epoch, b.no_of_txs,
          OR b.total_output IS DISTINCT FROM coalesce(ot.applied_output,0) AS needs_repair
 FROM b JOIN tx_totals tt ON tt.block_hash = b.hash
 LEFT JOIN output_totals ot ON ot.block_hash = b.hash
+CROSS JOIN scope_proof
+CROSS JOIN LATERAL (
+ SELECT md5(jsonb_build_object(
+   'block', (SELECT to_jsonb(bs) FROM yaci_store.block bs WHERE bs.hash=b.hash),
+   'transactions', coalesce((SELECT jsonb_agg(to_jsonb(ts) ORDER BY ts.tx_index,ts.tx_hash)
+      FROM yaci_store.transaction ts WHERE ts.block_hash=b.hash),'[]'::jsonb),
+   'outputs', coalesce((SELECT jsonb_agg(to_jsonb(us) ORDER BY us.tx_hash,us.output_index)
+      FROM (
+        SELECT us.* FROM yaci_store.address_utxo us WHERE us.slot=b.slot AND us.block_hash=b.hash
+        UNION ALL
+        SELECT us.* FROM yaci_store.transaction ts JOIN yaci_store.address_utxo us ON us.tx_hash=ts.tx_hash
+        WHERE ts.block_hash=b.hash AND (us.slot=b.slot AND us.block_hash=b.hash) IS NOT TRUE
+      ) us),'[]'::jsonb),
+   'invalid_logs', coalesce((SELECT jsonb_agg(to_jsonb(ins) ORDER BY ins.tx_hash)
+      FROM (
+        SELECT ins.* FROM yaci_store.invalid_transaction ins WHERE ins.slot=b.slot AND ins.block_hash=b.hash
+        UNION ALL
+        SELECT ins.* FROM yaci_store.transaction ts JOIN yaci_store.invalid_transaction ins ON ins.tx_hash=ts.tx_hash
+        WHERE ts.block_hash=b.hash AND (ins.slot=b.slot AND ins.block_hash=b.hash) IS NOT TRUE
+      ) ins),'[]'::jsonb),
+   'collateral_sources', coalesce((SELECT jsonb_agg(to_jsonb(cs) ORDER BY cs.tx_hash,cs.output_index)
+      FROM yaci_store.address_utxo cs JOIN (
+        SELECT DISTINCT key->>'tx_hash' AS tx_hash,
+          CASE WHEN key->>'output_index' ~ '^[0-9]+$' THEN (key->>'output_index')::integer END AS output_index
+        FROM yaci_store.transaction ts CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(ts.collateral_inputs)='array' THEN ts.collateral_inputs ELSE '[]'::jsonb END) key
+        WHERE ts.block_hash=b.hash AND ts.invalid IS TRUE
+      ) requested ON cs.tx_hash=requested.tx_hash AND cs.output_index=requested.output_index),'[]'::jsonb)
+ )::text) AS source_digest
+) proof
 WHERE tt.invalid_transactions > 0
 ORDER BY b.number, b.hash;
 ROLLBACK;

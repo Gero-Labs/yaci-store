@@ -32,7 +32,7 @@ public class BFUtilController {
     @PostMapping(value = "/txs/evaluate", consumes = MediaType.APPLICATION_CBOR_VALUE)
     @Operation(summary = "Submit a transaction for execution units evaluation",
                description = "Submit a CBOR-encoded transaction to evaluate execution units.")
-    public ResponseEntity<JsonNode> evaluateTx(@RequestBody byte[] cborTx,
+    public ResponseEntity<JsonNode> evaluateTx(@RequestBody(required = false) byte[] cborTx,
                                                @RequestParam(name = "version", defaultValue = "5") int version) {
         JsonNode result = bfUtilService.evaluateTx(cborTx, version);
         return ResponseEntity.ok(result);
@@ -41,9 +41,8 @@ public class BFUtilController {
     @PostMapping(value = "/txs/evaluate/utxos", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Submit a transaction for execution units evaluation (additional UTXO set)",
                description = "Submit a JSON payload with transaction CBOR and additional UTXO set to evaluate execution units.")
-    public ResponseEntity<JsonNode> evaluateTxWithUtxos(@RequestBody BFEvaluateUtxosRequest request,
-                                                        @RequestParam(name = "version", defaultValue = "5") int version) {
-        JsonNode result = bfUtilService.evaluateTxWithUtxos(request.getCbor(), request.getAdditionalUtxoSet(), version);
+    public ResponseEntity<JsonNode> evaluateTxWithUtxos(@RequestBody BFEvaluateUtxosRequest request) {
+        JsonNode result = bfUtilService.evaluateTxWithUtxos(request.getCbor(), request.getAdditionalUtxoSet(), 5);
         return ResponseEntity.ok(result);
     }
 

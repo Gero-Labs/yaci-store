@@ -41,6 +41,15 @@ public class TxEvaluationService {
         };
     }
 
+    /** Blockfrost uses the configured Ogmios node without changing the native evaluator mode. */
+    public Either<JsonNode, JsonNode> evaluateBlockfrostTx(byte[] cborTx, JsonNode additionalUtxoSet) throws ApiException {
+        OgmiosService service = ogmiosService.getIfAvailable();
+        if (service != null) {
+            return service.evaluateBlockfrostTransaction(cborTx, additionalUtxoSet);
+        }
+        return evaluateTx(cborTx, additionalUtxoSet);
+    }
+
     /**
      * Converts evaluator success JSON to the Blockfrost-compatible v5 Ogmios
      * response wrapper.

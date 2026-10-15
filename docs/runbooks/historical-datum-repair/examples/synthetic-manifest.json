@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "network": "preview",
+  "cursor_before": "",
+  "cursor_after": "1111111111111111111111111111111111111111111111111111111111111111",
+  "entries": [
+    {
+      "network": "preview",
+      "before": {
+        "hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "datum": "1800",
+        "created_at_tx": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "slot": null,
+        "create_datetime": "2026-01-01T00:00:00",
+        "update_datetime": "2026-01-01T00:00:00"
+      },
+      "before_fingerprint": "9353b8452b0b7c02b97ab3c58dd92d5892492302003c8394ec6f8794ed3c28ab",
+      "raw_hash": "d6151a4af5dbab50abc915c1a41e5bee160989792ae1ca5d8dd7c6294ad04bc0",
+      "classification": "retained_wrong_key",
+      "provenance": {
+        "kind": "inline",
+        "tx_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "slot": 100,
+        "tx_index": 1,
+        "output_index": 0,
+        "cbor": "1800"
+      }
+    }
+  ]
+}

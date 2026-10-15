@@ -6,6 +6,7 @@ import co.nstant.in.cbor.model.ByteString;
 import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.UnsignedInteger;
 import com.bloxbean.cardano.client.exception.CborRuntimeException;
+import com.bloxbean.cardano.client.crypto.Blake2bUtil;
 import com.bloxbean.cardano.client.plutus.spec.*;
 import com.bloxbean.cardano.client.util.JsonUtil;
 import com.bloxbean.cardano.yaci.core.model.Datum;
@@ -171,8 +172,14 @@ public class ScriptUtil {
             return null;
 
         try {
-            PlutusData plutusData = PlutusData.deserialize(HexUtil.decodeHexString(datumCbor));
-            return plutusData.getDatumHash();
+            byte[] originalBytes = HexUtil.decodeHexString(datumCbor);
+            DataItem[] dataItems = CborSerializationUtil.deserialize(originalBytes);
+            if (dataItems.length != 1)
+                throw new IllegalArgumentException("Datum must contain exactly one CBOR item");
+            PlutusData.deserialize(dataItems[0]); // Validate without reconstructing the bytes to hash.
+
+            // Ledger Data/BinaryData hashes the original memoized CBOR, including map order.
+            return HexUtil.encodeHexString(Blake2bUtil.blake2bHash256(originalBytes));
         } catch (Exception e) {
             log.error("Unable to deserialize and calculate datumhash for : " + datumCbor, e);
             return null;

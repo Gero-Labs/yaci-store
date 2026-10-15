@@ -467,6 +467,25 @@ public class BFAccountStorageReaderImpl implements BFAccountStorageReader {
     @Override
     public List<AccountAddress> findAddresses(String stakeAddress, int page, int count, Order order) {
         int offset = Math.max(page, 0) * count;
+        if (BlockfrostDialectUtil.isPostgres(dsl)) {
+            String direction = order == Order.desc ? "desc" : "asc";
+            // db-sync picks the first output per payment credential/script kind, then pages
+            // those output positions. A later address variant cannot replace that representative.
+            return dsl.resultQuery("""
+                    select address from (
+                      select coalesce(u.owner_addr_full,u.owner_addr) as address,u.slot,
+                        coalesce(u.tx_index,t.tx_index) as tx_index,u.output_index,
+                        row_number() over(partition by coalesce(u.owner_payment_credential,u.owner_addr),
+                          substring(u.owner_addr from position('1' in u.owner_addr)+1 for 1) in ('z','x','2','w')
+                          order by u.slot,coalesce(u.tx_index,t.tx_index),u.output_index) as rn
+                      from address_utxo u left join transaction t on t.tx_hash=u.tx_hash and u.tx_index is null
+                      where u.owner_stake_addr=?
+                    ) first_address where rn=1
+                    order by slot %s,tx_index %s,output_index %s limit ? offset ?
+                    """.formatted(direction,direction,direction),stakeAddress,count,offset)
+                    .fetch(row -> new AccountAddress(row.get("address",String.class)));
+        }
+
         if (utxoStoreProperties.isSaveAddress()) {
             var addressRecords = dsl.select(ADDRESS.ADDR_FULL)
                     .from(ADDRESS)
@@ -504,30 +523,29 @@ public class BFAccountStorageReaderImpl implements BFAccountStorageReader {
         );
 
         if (BlockfrostDialectUtil.isPostgres(dsl)) {
-            Field<?> amountsField = ADDRESS_UTXO.AMOUNTS;
-            Table<?> amountTable = DSL.table(
-                    "jsonb_to_recordset({0}::jsonb) as amt(unit text, quantity numeric)",
-                    amountsField
-            );
-            Field<String> unitField = DSL.field("amt.unit", String.class);
-            Field<BigDecimal> quantityField = DSL.field("amt.quantity", BigDecimal.class);
-
-            return dsl.select(unitField.as("unit"), DSL.sum(quantityField).cast(BigDecimal.class).as("total_quantity"))
-                    .from(ADDRESS_UTXO)
-                    .join(DSL.lateral(amountTable)).on(DSL.trueCondition())
-                    .where(ADDRESS_UTXO.OWNER_STAKE_ADDR.eq(stakeAddress))
-                    .and(unspentCondition)
-                    .and(unitField.ne(Constants.LOVELACE))
-                    .groupBy(unitField)
-                    .orderBy(unitField.asc())
-                    .limit(count)
-                    .offset(offset)
-                    .fetch(rec -> {
-                        BigDecimal qty = rec.get("total_quantity", BigDecimal.class);
-                        return new AccountAddressAsset(
-                                rec.get("unit", String.class),
-                                qty != null ? qty.toBigInteger() : BigInteger.ZERO);
-                    });
+            String direction = order == Order.desc ? "desc" : "asc";
+            // Blockfrost uses MIN(output.id) ascending and MAX(output.id) descending,
+            // followed by (policy,name) ascending. Chain output position is the equivalent.
+            return dsl.resultQuery("""
+                    with ranked_assets as (
+                      select amt.unit,amt.quantity,u.slot,coalesce(u.tx_index,t.tx_index) as tx_index,u.output_index,
+                        row_number() over(partition by amt.unit
+                          order by u.slot %s,coalesce(u.tx_index,t.tx_index) %s,u.output_index %s) as rn
+                      from address_utxo u join transaction t on t.tx_hash=u.tx_hash
+                      cross join lateral jsonb_to_recordset(u.amounts::jsonb) amt(unit text,quantity numeric)
+                      where u.owner_stake_addr=? and amt.unit<>'lovelace' and t.invalid=false
+                        and not exists(select 1 from tx_input i where i.tx_hash=u.tx_hash and i.output_index=u.output_index)
+                    ), totals as (
+                      select unit,sum(quantity) as quantity,
+                        max(slot) filter(where rn=1) as sort_slot,
+                        max(tx_index) filter(where rn=1) as sort_tx_index,
+                        max(output_index) filter(where rn=1) as sort_output_index
+                      from ranked_assets group by unit
+                    ) select unit,quantity from totals
+                    order by sort_slot %s,sort_tx_index %s,sort_output_index %s,unit asc limit ? offset ?
+                    """.formatted(direction,direction,direction,direction,direction,direction),stakeAddress,count,offset)
+                    .fetch(row -> new AccountAddressAsset(row.get("unit",String.class),
+                            row.get("quantity",BigDecimal.class).toBigInteger()));
         } else {
             var rows = dsl.select(ADDRESS_UTXO.AMOUNTS.cast(String.class).as("amounts"))
                     .from(ADDRESS_UTXO)

@@ -31,7 +31,7 @@ public class BFMetadataService {
 
 
     public List<BFMetadataJsonDto> getMetadataByLabel(String label, int page, int count, Order order) {
-        List<TxMetadataLabel> metadata = metadataService.getMetadataByLabel(label, page, count, order);
+        List<TxMetadataLabel> metadata = bfMetadataStorageReader.findByLabel(label, page, count, order);
         if (metadata == null || metadata.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "The requested component has not been found.");
@@ -43,7 +43,7 @@ public class BFMetadataService {
 
 
     public List<BFMetadataCborDto> getMetadataCborByLabel(String label, int page, int count, Order order) {
-        List<TxMetadataLabel> metadata = metadataService.getMetadataByLabel(label, page, count, order);
+        List<TxMetadataLabel> metadata = bfMetadataStorageReader.findByLabel(label, page, count, order);
         if (metadata == null || metadata.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "The requested component has not been found.");

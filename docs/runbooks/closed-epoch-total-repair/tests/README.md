@@ -1,12 +1,20 @@
 # PostgreSQL16 repair guard tests
 
-Run from any directory with Python3 and Docker available:
+Run the Testcontainers-owned fixture from the repository root:
 
 ```sh
-python3 docs/runbooks/closed-epoch-total-repair/tests/validate.py --output-directory /tmp/yaci-epoch-repair-proof
+./gradlew :extensions:blockfrost:blockfrost-pools:test --tests '*BFClosedEpochRepairGuardsTest'
 ```
 
-Omit `--output-directory` to use a new temporary directory. All results, fixture copies and per-case stdout/stderr go there, outside the repository. The harness resolves the tested SQL relative to its own file, starts a uniquely named disposable `postgres:16` container with network disabled and tmpfs storage, refuses to replace an existing container, and removes its own container in `finally`. It does not use production credentials or contact production.
+The JUnit test starts PostgreSQL 16 through Testcontainers with three startup
+attempts and uses pooled JDBC to create a random fixture marker. It invokes
+`validate.py` with the container ID and generated marker in the environment.
+The script refuses destructive fixture setup unless Docker confirms
+Testcontainers ownership and the exact database marker matches. It uses only
+`docker inspect` and `docker exec`; Testcontainers owns container cleanup.
+No production credentials or production database are used. Each run writes
+SQL hashes, fixture copies, results and per-case stdout/stderr to a new temporary
+evidence directory outside the repository, printed by the test.
 
 `fixture.sql` records the faithful relevant schema types and data constructed by the harness: valid-only and mixed/invalid blocks, Babbage total collateral/return, Alonzo collateral inputs without return, already-correct controls, historical inputs, camelCase invalid bodies and independent db-sync transaction fixtures.
 

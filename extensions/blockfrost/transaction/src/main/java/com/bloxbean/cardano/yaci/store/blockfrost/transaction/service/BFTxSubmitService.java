@@ -33,6 +33,7 @@ public class BFTxSubmitService {
     }
 
     public String submitTx(byte[] cborTx) {
+        cborTx = cborTx == null ? new byte[0] : cborTx;
         if (submitApiUrl != null && !submitApiUrl.isBlank()) {
             return submitViaExternalApi(cborTx);
         }

@@ -195,7 +195,8 @@ public class BFAssetStorageReaderImpl implements BFAssetStorageReader {
      */
     @Override
     public Optional<BFAssetInfo> findAssetInfo(String unit) {
-        Condition assetCondition = buildAssetCondition(unit);
+        // Ledger mint maps omit zero quantities; stored raw zero rows are not logical mint/burn events.
+        Condition assetCondition = buildAssetCondition(unit).and(ASSETS.QUANTITY.ne(0L));
 
         var initialMintTxQuery = dsl.select(ASSETS.TX_HASH)
                 .from(ASSETS)
@@ -273,12 +274,12 @@ public class BFAssetStorageReaderImpl implements BFAssetStorageReader {
         Table<?> historyPage = DSL.table(
                 """
                 (
-                    /* Preserve every mint/burn event for the unit. Materialize the set because the provisional
+                    /* Preserve every nonzero mint/burn event for the unit. Materialize the set because the provisional
                        page, prefix count, and candidate selection all reuse it. */
                     with events as materialized (
                         select tx_hash, mint_type, quantity, slot::bigint as slot
                         from assets
-                        where unit = {2}
+                        where unit = {2} and quantity <> 0
                     ),
                     /* This page establishes only the slot boundaries; tx_index is not available until the
                        transaction join below, so these rows are not yet the final page. */
@@ -350,7 +351,7 @@ public class BFAssetStorageReaderImpl implements BFAssetStorageReader {
 
     private List<BFAssetHistory> findAssetHistoryFallback(String unit, int page, int count, Order order) {
         int offset = Math.max(page, 0) * count;
-        Condition assetCondition = buildAssetCondition(unit);
+        Condition assetCondition = buildAssetCondition(unit).and(ASSETS.QUANTITY.ne(0L));
         SortField<?> slotOrder = order == Order.desc ? ASSETS.SLOT.desc() : ASSETS.SLOT.asc().nullsLast();
         SortField<?> txIndexOrder = order == Order.desc
                 ? TRANSACTION.TX_INDEX.desc().nullsLast()

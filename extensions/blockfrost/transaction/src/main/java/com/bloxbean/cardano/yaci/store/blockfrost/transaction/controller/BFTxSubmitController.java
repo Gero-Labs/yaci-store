@@ -32,7 +32,7 @@ public class BFTxSubmitController {
     @PostMapping(value = "submit", consumes = MediaType.APPLICATION_CBOR_VALUE)
     @Operation(summary = "Submit a transaction",
                description = "Submit an already serialized transaction to the network.")
-    public ResponseEntity<String> submitTx(@RequestBody byte[] cborTx) {
+    public ResponseEntity<String> submitTx(@RequestBody(required = false) byte[] cborTx) {
         String txHash = bfTxSubmitService.submitTx(cborTx);
         return ResponseEntity.ok(txHash);
     }

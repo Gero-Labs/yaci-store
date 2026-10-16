@@ -1,0 +1,28 @@
+[
+  {
+    "tx_hash": "0884557235a33fd7268579275cf4908c9ac8d75df0cfc750b7e03607a46d99b4",
+    "voter_hot_id": "cc_hot1qvr7p6ms588athsgfd0uez5m9rlhwu3g9dt7wcxkjtr4hhsq6ytv2",
+    "proposal_id": "gov_action1zhuz5djmmmjg8f9s8pe6grfc98xg3szglums8cgm6qwancp4eytqqmpu0pr",
+    "proposal_tx_hash": "15f82a365bdee483a4b03873a40d3829cc88c048ff3703e11bd01dd9e035c916",
+    "proposal_index": 0,
+    "governance_type": "info_action",
+    "vote": "yes",
+    "metadata_url": "ipfs://QmZGxmZ73YUzP8YByz5XsxQKKbu9XHnczW8bTJvzyaHVoi",
+    "metadata_hash": "62b51f7b78dfa4875f5da060140a0fa3f340e3ca29a61a1c800ae02d0964dc80",
+    "block_height": 10852528,
+    "block_time": 1726691979
+  },
+  {
+    "tx_hash": "b5c852847c12c30ef29c598b6baffd2cacf0ccf58d003ebfd7bb2219d8719daf",
+    "voter_hot_id": "cc_hot1qwzuglw5hx3wwr5gjewerhtfhcvz64s9kgam2fgtrj2t7eqs00fzv",
+    "proposal_id": "gov_action1zhuz5djmmmjg8f9s8pe6grfc98xg3szglums8cgm6qwancp4eytqqmpu0pr",
+    "proposal_tx_hash": "15f82a365bdee483a4b03873a40d3829cc88c048ff3703e11bd01dd9e035c916",
+    "proposal_index": 0,
+    "governance_type": "info_action",
+    "vote": "yes",
+    "metadata_url": "ipfs://bafkreibfvicensie6355siagjjnb7fyqbv4ud5dahzalrd3p7ccnrhcspy",
+    "metadata_hash": "2b87185632b98b829ac048f94749270b9e6442524faeba5a4aadcd05e58a728e",
+    "block_height": 10890715,
+    "block_time": 1727470869
+  }
+]

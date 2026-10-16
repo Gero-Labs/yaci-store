@@ -9,6 +9,7 @@ BEGIN;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
+SET LOCAL jit = off;
 CREATE TEMP TABLE reviewed_epoch_block_patch ON COMMIT DROP AS
 SELECT * FROM jsonb_to_recordset(:'reviewed_json'::jsonb) AS x(
   hash text, number bigint, slot bigint, epoch integer, no_of_txs integer,

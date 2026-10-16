@@ -5,6 +5,7 @@ BEGIN READ ONLY;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
+SET LOCAL jit = off;
 SELECT :e::integer AS epoch, :s0::bigint AS first_slot, :s1::bigint AS last_slot,
        count(*) AS transaction_rows, coalesce(sum(t.fee),0) AS effective_fee_sum,
        coalesce(sum(t.out_sum),0) AS applied_output_sum,

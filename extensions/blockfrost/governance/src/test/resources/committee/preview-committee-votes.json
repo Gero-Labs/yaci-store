@@ -1,0 +1,28 @@
+[
+  {
+    "tx_hash": "658e603f81285b12a01d32628da1cb1778cc0dedcc03cd861414181567abea83",
+    "voter_hot_id": "cc_hot1qdjt7zpx7a8d76y29r4tml9aryff9m6pegz84lttspujfdcrkr62j",
+    "proposal_id": "gov_action1u008nt84f5tssj2m9zt7qfw9vh07kt7ukmy92u6ufrlx4v8uhe9qq7qtkgd",
+    "proposal_tx_hash": "e3de79acf54d1708495b2897e025c565dfeb2fdcb6c855735c48fe6ab0fcbe4a",
+    "proposal_index": 0,
+    "governance_type": "info_action",
+    "vote": "abstain",
+    "metadata_url": "https://raw.githubusercontent.com/carloslodelar/proposals/refs/heads/main/voteABSTAIN.jsonld",
+    "metadata_hash": "415fc89f163c97e8a7f3c876be75f4d7782db23ea0f2c93527c8a81624465703",
+    "block_height": 2611734,
+    "block_time": 1729881491
+  },
+  {
+    "tx_hash": "9bcfcd9b446613503c9e1ec4cf59ac44416a9adedb7fe66549c4b5789e0ebf96",
+    "voter_hot_id": "cc_hot1qdjt7zpx7a8d76y29r4tml9aryff9m6pegz84lttspujfdcrkr62j",
+    "proposal_id": "gov_action1u008nt84f5tssj2m9zt7qfw9vh07kt7ukmy92u6ufrlx4v8uhe9qq7qtkgd",
+    "proposal_tx_hash": "e3de79acf54d1708495b2897e025c565dfeb2fdcb6c855735c48fe6ab0fcbe4a",
+    "proposal_index": 0,
+    "governance_type": "info_action",
+    "vote": "no",
+    "metadata_url": "https://raw.githubusercontent.com/carloslodelar/proposals/refs/heads/main/voteNO.jsonld",
+    "metadata_hash": "249847d032a3472ed4db53819434fc6ebd936f918a5a18345f82e7bcaaaa5c1f",
+    "block_height": 2611744,
+    "block_time": 1729881707
+  }
+]

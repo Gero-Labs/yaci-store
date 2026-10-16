@@ -1,5 +1,8 @@
 import org.gradle.api.publish.maven.MavenPublication
 
+// Docker Engine 29 requires the current Testcontainers API negotiation.
+ext['testcontainers.version'] = '1.21.4'
+
 dependencies {
 
     api project(":extensions:blockfrost:blockfrost-common")
@@ -15,6 +18,10 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.jooq:jooq'
+    testRuntimeOnly 'com.h2database:h2'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testRuntimeOnly 'org.postgresql:postgresql'
 
 }
 

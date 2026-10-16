@@ -18,6 +18,9 @@ import org.jooq.Record;
 import org.jooq.SortField;
 import org.jooq.Table;
 import org.springframework.stereotype.Repository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -29,6 +32,7 @@ import static com.bloxbean.cardano.yaci.store.blocks.jooq.Tables.BLOCK;
 import static com.bloxbean.cardano.yaci.store.transaction.jooq.Tables.WITHDRAWAL;
 import static com.bloxbean.cardano.yaci.store.governance.jooq.Tables.VOTING_PROCEDURE;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE;
+import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE_TOTAL;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.INSTANT_REWARD;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.REWARD;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.REWARD_REST;
@@ -40,111 +44,100 @@ import static org.jooq.impl.DSL.*;
 public class BFPoolsStorageReaderImpl implements BFPoolsStorageReader {
     private final DSLContext dsl;
     private final ObjectMapper objectMapper;
+    @Value("${store.adapot.epoch-stake-totals-enabled:false}")
+    private boolean epochStakeTotalsEnabled;
 
     @Override
     public List<String> getPoolIds(int page, int count, String order) {
-        int offset = page * count;
-        Table<?> currentPools = latestPoolStateTable(true, false, false);
-        SortField<?> registrationOrder = "desc".equals(order)
-                ? field(name("current_pools", "registration_slot"), Long.class).desc()
-                : field(name("current_pools", "registration_slot"), Long.class).asc();
-        SortField<?> slotOrder = "desc".equals(order)
-                ? field(name("current_pools", "slot"), Long.class).desc()
-                : field(name("current_pools", "slot"), Long.class).asc();
-
-        return dsl.select(field(name("current_pools", "pool_id"), String.class))
-                .from(currentPools)
-                .orderBy(registrationOrder, slotOrder)
-                .limit(count)
-                .offset(offset)
-                .fetch(record -> PoolUtil.getBech32PoolId(record.get(field(name("current_pools", "pool_id"), String.class))));
+        boolean desc = "desc".equalsIgnoreCase(order);
+        Table<?> registrations = bfPoolCertificateRows(true, "latest_registration");
+        Table<?> retirements = bfPoolCertificateRows(false, "latest_retirement");
+        Table<?> first = bfFirstPoolAppearance();
+        Field<String> id = first.field("pool_id", String.class);
+        org.jooq.Condition laterFutureRetirement = row(registrations.field("slot", Long.class), registrations.field("tx_index", Integer.class))
+                .lt(row(retirements.field("slot", Long.class), retirements.field("tx_index", Integer.class)))
+                .and(retirements.field("retirement_epoch", Integer.class).gt(bfPoolCurrentEpoch()));
+        // Blockfrost pool_hash.id follows the first registration certificate. An update or
+        // retirement never moves that position. Apply latest certificate membership first.
+        return dsl.select(id).from(first)
+                .join(registrations).on(id.eq(registrations.field("pool_id", String.class)))
+                .leftJoin(retirements).on(id.eq(retirements.field("pool_id", String.class)))
+                .where(retirements.field("pool_id", String.class).isNull()
+                        .or(bfRegistrationAfterRetirement(registrations, retirements))
+                        .or(laterFutureRetirement))
+                .orderBy(bfPoolPositionOrder(first, desc))
+                .limit(count).offset(page * count)
+                .fetch(row -> PoolUtil.getBech32PoolId(row.get(id)));
     }
 
     @Override
     public List<BFPoolRetireItem> getRetiredPools(int page, int count, String order) {
-        int offset = page * count;
-        Integer currentEpoch = dsl.select(max(BLOCK.EPOCH)).from(BLOCK).fetchOneInto(Integer.class);
-        Field<Integer> rn = rowNumber()
-                .over(partitionBy(POOL.POOL_ID).orderBy(POOL.SLOT.desc(), POOL.TX_INDEX.desc(), POOL.CERT_INDEX.desc()))
-                .as("rn");
-        Table<?> rankedRetired = dsl.select(
-                        POOL.POOL_ID,
-                        POOL.STATUS,
-                        POOL.RETIRE_EPOCH,
-                        POOL.SLOT,
-                        POOL.TX_HASH,
-                        POOL.TX_INDEX,
-                        POOL.CERT_INDEX,
-                        rn
-                )
-                .from(POOL)
-                .where(currentEpoch != null ? POOL.EPOCH.le(currentEpoch) : noCondition())
-                .asTable("ranked_retired");
-        Table<?> retiredPools = dsl.select(
-                        field(name("ranked_retired", "pool_id")).as("pool_id"),
-                        field(name("ranked_retired", "retire_epoch")).as("retire_epoch"),
-                        field(name("ranked_retired", "slot")).as("slot"),
-                        field(name("ranked_retired", "tx_hash")).as("tx_hash"),
-                        field(name("ranked_retired", "tx_index")).as("tx_index"),
-                        field(name("ranked_retired", "cert_index")).as("cert_index")
-                )
-                .from(rankedRetired)
-                .where(field(name("ranked_retired", "rn"), Integer.class).eq(1))
-                .and(field(name("ranked_retired", "status"), String.class).eq("RETIRED"))
-                .asTable("retired_pools");
-        Table<?> latestRetiring = latestPoolStatusTable("RETIRING", "latest_retiring");
-        Field<String> poolIdField = retiredPools.field("pool_id", String.class);
-        Field<Integer> retireEpochField = retiredPools.field("retire_epoch", Integer.class);
-        Field<Long> slotField = retiredPools.field("slot", Long.class);
-        Field<String> txHashField = retiredPools.field("tx_hash", String.class);
-        Field<Integer> certIndexField = retiredPools.field("cert_index", Integer.class);
-        Field<Long> retireSortSlotField = coalesce(latestRetiring.field("slot", Long.class), slotField);
-        Field<String> retireSortTxHashField = coalesce(latestRetiring.field("tx_hash", String.class), txHashField);
-        Field<Integer> retireSortCertIndexField = coalesce(latestRetiring.field("cert_index", Integer.class), certIndexField);
-        SortField<?> retireEpochOrder = "desc".equals(order)
-                ? retireEpochField.desc()
-                : retireEpochField.asc();
-        SortField<?> slotOrder = "desc".equals(order)
-                ? retireSortSlotField.desc()
-                : retireSortSlotField.asc();
-
-        return dsl.select(poolIdField, retireEpochField)
-                .from(retiredPools)
-                .leftJoin(latestRetiring).on(poolIdField.eq(latestRetiring.field("pool_id", String.class)))
-                .orderBy(retireEpochOrder, slotOrder, retireSortTxHashField.asc(), retireSortCertIndexField.asc(), poolIdField.asc())
-                .limit(count)
-                .offset(offset)
-                .fetch(record -> new BFPoolRetireItem(
-                        record.get(poolIdField),
-                        record.get(retireEpochField)
-                ));
+        return bfRetirementList(page, count, order, false);
     }
 
     @Override
     public List<BFPoolRetireItem> getRetiringPools(int page, int count, String order) {
-        int offset = page * count;
-        Table<?> retiringPools = latestPoolStateTable(false, false, true);
-        Field<String> poolIdField = retiringPools.field("pool_id", String.class);
-        Field<Integer> retireEpochField = retiringPools.field("retire_epoch", Integer.class);
-        Field<Long> slotField = retiringPools.field("slot", Long.class);
-        Field<String> txHashField = retiringPools.field("tx_hash", String.class);
-        Field<Integer> certIndexField = retiringPools.field("cert_index", Integer.class);
-        SortField<?> retireEpochOrder = "desc".equals(order)
-                ? retireEpochField.desc()
-                : retireEpochField.asc();
-        SortField<?> slotOrder = "desc".equals(order)
-                ? slotField.desc()
-                : slotField.asc();
+        return bfRetirementList(page, count, order, true);
+    }
 
-        return dsl.select(poolIdField, retireEpochField)
-                .from(retiringPools)
-                .orderBy(retireEpochOrder, slotOrder, txHashField.asc(), certIndexField.asc())
-                .limit(count)
-                .offset(offset)
-                .fetch(record -> new BFPoolRetireItem(
-                        record.get(poolIdField),
-                        record.get(retireEpochField)
-                ));
+    private List<BFPoolRetireItem> bfRetirementList(int page, int count, String order, boolean future) {
+        boolean desc = "desc".equalsIgnoreCase(order);
+        Table<?> registrations = bfPoolCertificateRows(true, "latest_registration");
+        Table<?> retirements = bfPoolCertificateRows(false, "latest_retirement");
+        Field<String> id = registrations.field("pool_id", String.class);
+        Field<Integer> epoch = retirements.field("retirement_epoch", Integer.class);
+        return dsl.select(id, epoch).from(registrations)
+                .join(retirements).on(id.eq(retirements.field("pool_id", String.class)))
+                .where(bfRegistrationAfterRetirement(registrations, retirements).not())
+                .and(future ? epoch.gt(bfPoolCurrentEpoch()) : epoch.le(bfPoolCurrentEpoch()))
+                .orderBy(desc ? epoch.desc() : epoch.asc(),
+                        desc ? retirements.field("slot", Long.class).desc() : retirements.field("slot", Long.class).asc(),
+                        desc ? retirements.field("tx_index", Integer.class).desc() : retirements.field("tx_index", Integer.class).asc(),
+                        desc ? retirements.field("cert_index", Integer.class).desc() : retirements.field("cert_index", Integer.class).asc())
+                .limit(count).offset(page * count)
+                .fetch(row -> new BFPoolRetireItem(row.get(id), row.get(epoch)));
+    }
+
+    private Field<Integer> bfPoolCurrentEpoch() {
+        // The canonical lists compare retirement to epoch.max(no), not a future effective
+        // pool-state record. Keep the comparison inside the same SQL snapshot as the page.
+        return field(dsl.select(max(field(name("number"), Integer.class))).from(table(name("epoch"))));
+    }
+
+    private Table<?> bfFirstPoolAppearance() {
+        Field<Integer> rn = rowNumber().over(partitionBy(POOL_REGISTRATION.POOL_ID)
+                .orderBy(POOL_REGISTRATION.SLOT.asc(), POOL_REGISTRATION.TX_INDEX.asc(), POOL_REGISTRATION.CERT_INDEX.asc())).as("rn");
+        Table<?> ranked = dsl.select(POOL_REGISTRATION.POOL_ID, POOL_REGISTRATION.SLOT,
+                POOL_REGISTRATION.TX_INDEX, POOL_REGISTRATION.CERT_INDEX, rn)
+                .from(POOL_REGISTRATION).asTable("ranked_first_registration");
+        return dsl.select(ranked.field("pool_id"), ranked.field("slot"), ranked.field("tx_index"), ranked.field("cert_index"))
+                .from(ranked).where(ranked.field("rn", Integer.class).eq(1)).asTable("first_registration");
+    }
+
+    private Table<?> bfPoolCertificateRows(boolean registration, String alias) {
+        Table<?> source = registration ? POOL_REGISTRATION : POOL_RETIREMENT;
+        Field<String> id = field(name("pool_id"), String.class);
+        Field<Long> slot = field(name("slot"), Long.class);
+        Field<Integer> tx = field(name("tx_index"), Integer.class);
+        Field<Integer> cert = field(name("cert_index"), Integer.class);
+        Field<Integer> rn = rowNumber().over(partitionBy(id).orderBy(slot.desc(), tx.desc(), cert.desc())).as("rn");
+        var fields = new ArrayList<Field<?>>();
+        fields.add(id); fields.add(slot); fields.add(tx); fields.add(cert);
+        if (!registration) fields.add(field(name("retirement_epoch"), Integer.class));
+        fields.add(rn);
+        Table<?> ranked = dsl.select(fields).from(source).asTable("ranked_" + alias);
+        return dsl.select(ranked.fields()).from(ranked).where(ranked.field("rn", Integer.class).eq(1)).asTable(alias);
+    }
+
+    private org.jooq.Condition bfRegistrationAfterRetirement(Table<?> registration, Table<?> retirement) {
+        return row(registration.field("slot", Long.class), registration.field("tx_index", Integer.class), registration.field("cert_index", Integer.class))
+                .gt(row(retirement.field("slot", Long.class), retirement.field("tx_index", Integer.class), retirement.field("cert_index", Integer.class)));
+    }
+
+    private List<SortField<?>> bfPoolPositionOrder(Table<?> table, boolean desc) {
+        return List.of(desc ? table.field("slot", Long.class).desc() : table.field("slot", Long.class).asc(),
+                desc ? table.field("tx_index", Integer.class).desc() : table.field("tx_index", Integer.class).asc(),
+                desc ? table.field("cert_index", Integer.class).desc() : table.field("cert_index", Integer.class).asc());
     }
 
     @Override
@@ -693,112 +686,103 @@ public class BFPoolsStorageReaderImpl implements BFPoolsStorageReader {
     // -------------------------------------------------------------------------
 
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public List<BFPoolHistoryDto> getPoolHistoryFull(String poolIdHex, int page, int count, String order) {
         boolean asc = !"desc".equalsIgnoreCase(order);
         int offset = page * count;
         Integer currentBlockEpoch = dsl.select(max(BLOCK.EPOCH)).from(BLOCK).fetchOneInto(Integer.class);
+        if (currentBlockEpoch == null) {
+            return List.of();
+        }
         List<PoolFeeParam> poolFeeParams = getPoolFeeParams(poolIdHex);
-
-        Table<?> pageEpochs = dsl.select(
-                        EPOCH_STAKE.EPOCH.as("epoch"),
-                        EPOCH_STAKE.EPOCH.plus(2).as("active_epoch")
-                )
+        // db-sync snapshots contain only nonzero active stake; Yaci also stores
+        // zero-balance delegations. Exclude them before discovery/count/pagination.
+        // LIMIT inside LATERAL pins one indexed existence probe per small epoch-table
+        // row. Plain EXISTS is decorrelated to a full historical stake aggregation by
+        // PostgreSQL, while page subqueries repeated inside partitioned IN clauses can
+        // spend over a minute planning. Fetch the finite epoch list first instead.
+        Field<Long> epochNumber = field(name("history_epoch", "number"), Long.class);
+        Field<Integer> snapshotEpoch = epochNumber.minus(2L).cast(Integer.class);
+        Table<?> epochTable = table(name("epoch")).as("history_epoch");
+        Table<?> existsForPool = lateral(dsl.selectOne().from(EPOCH_STAKE)
+                .where(EPOCH_STAKE.EPOCH.eq(snapshotEpoch))
+                .and(EPOCH_STAKE.POOL_ID.eq(poolIdHex))
+                .and(EPOCH_STAKE.AMOUNT.gt(BigInteger.ZERO)).limit(1)).as("pool_snapshot");
+        List<Integer> snapshots = dsl.select(snapshotEpoch)
+                .from(epochTable).crossJoin(existsForPool)
+                .where(epochNumber.lt(currentBlockEpoch.longValue()))
+                .orderBy(asc ? epochNumber.asc() : epochNumber.desc())
+                .limit(count).offset(offset).fetch(snapshotEpoch);
+        if (snapshots.isEmpty()) {
+            return List.of();
+        }
+        List<Integer> activeEpochs = snapshots.stream().map(epoch -> epoch + 2).toList();
+        Field<BigInteger> activeStakeField = sum(EPOCH_STAKE.AMOUNT).cast(BigInteger.class).as("active_stake");
+        Field<Integer> delegatorsField = count(EPOCH_STAKE.ADDRESS).as("delegators_count");
+        Map<Integer, PoolHistoryStake> poolStakes = dsl.select(EPOCH_STAKE.EPOCH, activeStakeField, delegatorsField)
                 .from(EPOCH_STAKE)
                 .where(EPOCH_STAKE.POOL_ID.eq(poolIdHex))
-                .and(currentBlockEpoch != null
-                        ? EPOCH_STAKE.EPOCH.plus(2).le(currentBlockEpoch - 1)
-                        : noCondition())
+                .and(EPOCH_STAKE.EPOCH.in(snapshots))
+                .and(EPOCH_STAKE.AMOUNT.gt(BigInteger.ZERO))
                 .groupBy(EPOCH_STAKE.EPOCH)
-                .orderBy(asc ? EPOCH_STAKE.EPOCH.asc() : EPOCH_STAKE.EPOCH.desc())
-                .limit(count)
-                .offset(offset)
-                .asTable("page_epochs");
-
-        Field<Integer> pageEpochField = field(name("page_epochs", "epoch"), Integer.class);
-        Field<Integer> pageActiveEpochField = field(name("page_epochs", "active_epoch"), Integer.class);
-
-        var poolStakeSub = dsl.select(
-                        EPOCH_STAKE.EPOCH.as("pool_epoch"),
-                        sum(EPOCH_STAKE.AMOUNT).as("active_stake"),
-                        count(EPOCH_STAKE.ADDRESS).as("delegators_count")
-                )
-                .from(EPOCH_STAKE)
-                .where(EPOCH_STAKE.POOL_ID.eq(poolIdHex))
-                .and(EPOCH_STAKE.EPOCH.in(dsl.select(pageEpochField).from(pageEpochs)))
-                .groupBy(EPOCH_STAKE.EPOCH)
-                .asTable("pool_stake_sub");
-
-        var totalStakeSub = dsl.select(
-                        EPOCH_STAKE.EPOCH.as("ts_epoch"),
-                        sum(EPOCH_STAKE.AMOUNT).as("total_stake")
-                )
-                .from(EPOCH_STAKE)
-                .where(EPOCH_STAKE.EPOCH.in(dsl.select(pageEpochField).from(pageEpochs)))
-                .groupBy(EPOCH_STAKE.EPOCH)
-                .asTable("total_stake_sub");
-
-        var rewardSub = dsl.select(
-                        REWARD.EARNED_EPOCH.as("r_epoch"),
-                        sum(REWARD.AMOUNT).as("rewards")
-                )
+                .fetchMap(EPOCH_STAKE.EPOCH, r -> new PoolHistoryStake(r.get(activeStakeField), r.get(delegatorsField)));
+        Map<Integer, BigInteger> totalStakes = getPoolHistoryTotalStakes(snapshots);
+        Field<BigInteger> rewardsField = sum(REWARD.AMOUNT).cast(BigInteger.class).as("rewards");
+        Map<Integer, BigInteger> rewards = dsl.select(REWARD.EARNED_EPOCH, rewardsField)
                 .from(REWARD)
                 .where(REWARD.POOL_ID.eq(poolIdHex))
                 .and(REWARD.TYPE.ne("refund"))
-                .and(REWARD.EARNED_EPOCH.in(dsl.select(pageActiveEpochField).from(pageEpochs)))
+                .and(REWARD.EARNED_EPOCH.in(activeEpochs))
                 .groupBy(REWARD.EARNED_EPOCH)
-                .asTable("reward_sub");
-
-        var blockSub = dsl.select(
-                        BLOCK.EPOCH.as("b_epoch"),
-                        count().as("blocks")
-                )
+                .fetchMap(REWARD.EARNED_EPOCH, rewardsField);
+        Field<Integer> blocksField = count().as("blocks");
+        Map<Integer, Integer> blocks = dsl.select(BLOCK.EPOCH, blocksField)
                 .from(BLOCK)
                 .where(BLOCK.SLOT_LEADER.eq(poolIdHex))
-                .and(BLOCK.EPOCH.in(dsl.select(pageActiveEpochField).from(pageEpochs)))
+                .and(BLOCK.EPOCH.in(activeEpochs))
                 .groupBy(BLOCK.EPOCH)
-                .asTable("block_sub");
+                .fetchMap(BLOCK.EPOCH, blocksField);
 
-        return dsl.select(
-                        pageActiveEpochField.as("active_epoch"),
-                        field(name("pool_stake_sub", "active_stake"), BigInteger.class).as("active_stake"),
-                        field(name("pool_stake_sub", "delegators_count"), Integer.class).as("delegators_count"),
-                        field(name("total_stake_sub", "total_stake"), BigInteger.class).as("total_stake"),
-                        field(name("reward_sub", "rewards"), BigInteger.class).as("rewards"),
-                        field(name("block_sub", "blocks"), Integer.class).as("blocks")
-                )
-                .from(pageEpochs)
-                .leftJoin(poolStakeSub)
-                .on(field(name("pool_stake_sub", "pool_epoch"), Integer.class).eq(pageEpochField))
-                .leftJoin(totalStakeSub)
-                .on(field(name("total_stake_sub", "ts_epoch"), Integer.class).eq(pageEpochField))
-                .leftJoin(rewardSub)
-                .on(field(name("reward_sub", "r_epoch"), Integer.class).eq(pageActiveEpochField))
-                .leftJoin(blockSub)
-                .on(field(name("block_sub", "b_epoch"), Integer.class).eq(pageActiveEpochField))
-                .orderBy(asc ? pageEpochField.asc() : pageEpochField.desc())
-                .fetch()
-                .stream()
-                .map(r -> {
-                    BigInteger activeStake = r.get("active_stake", BigInteger.class);
-                    BigInteger totalStake = r.get("total_stake", BigInteger.class);
-                    BigInteger rewards = r.get("rewards", BigInteger.class);
-                    Integer blocks = r.get("blocks", Integer.class);
-                    Integer epoch = r.get("active_epoch", Integer.class);
+        return snapshots.stream().map(snapshot -> {
+                    Integer epoch = snapshot + 2;
+                    PoolHistoryStake stake = poolStakes.get(snapshot);
+                    BigInteger activeStake = stake != null ? stake.amount() : null;
+                    BigInteger epochRewards = rewards.get(epoch);
                     PoolFeeParam poolFeeParam = findEffectivePoolFeeParam(poolFeeParams, epoch);
-                    Double activeSize = calculateActiveSize(activeStake, totalStake);
-                    String rewardsValue = mapHistoryRewardsValue(rewards);
-                    String feesValue = calculateOperatorFees(rewards, poolFeeParam);
                     return BFPoolHistoryDto.builder()
                             .epoch(epoch)
-                            .blocks(blocks != null ? blocks : 0)
-                            .fees(feesValue)
+                            .blocks(blocks.getOrDefault(epoch, 0))
+                            .fees(calculateOperatorFees(epochRewards, poolFeeParam))
                             .activeStake(activeStake != null ? activeStake.toString() : null)
-                            .activeSize(activeSize)
-                            .delegatorsCount(r.get("delegators_count", Integer.class))
-                            .rewards(rewardsValue)
+                            .activeSize(calculateActiveSize(activeStake, totalStakes.get(snapshot)))
+                            .delegatorsCount(stake != null ? stake.delegators() : null)
+                            .rewards(mapHistoryRewardsValue(epochRewards))
                             .build();
                 })
                 .toList();
+    }
+
+    private Map<Integer, BigInteger> getPoolHistoryTotalStakes(List<Integer> snapshots) {
+        Map<Integer, BigInteger> totals = new HashMap<>();
+        if (epochStakeTotalsEnabled) {
+            totals.putAll(dsl.select(EPOCH_STAKE_TOTAL.EPOCH, EPOCH_STAKE_TOTAL.TOTAL)
+                    .from(EPOCH_STAKE_TOTAL).where(EPOCH_STAKE_TOTAL.EPOCH.in(snapshots))
+                    .and(EPOCH_STAKE_TOTAL.TOTAL.isNotNull())
+                    .fetchMap(EPOCH_STAKE_TOTAL.EPOCH, EPOCH_STAKE_TOTAL.TOTAL));
+        }
+        List<Integer> missing = snapshots.stream().filter(epoch -> !totals.containsKey(epoch)).toList();
+        if (!missing.isEmpty()) {
+            // Compatibility fallback remains exact. The accepted rollout makes this rare;
+            // a missing published total never turns a nonempty snapshot into a null field.
+            Field<BigInteger> totalField = sum(EPOCH_STAKE.AMOUNT).cast(BigInteger.class).as("total_stake_sub");
+            totals.putAll(dsl.select(EPOCH_STAKE.EPOCH, totalField).from(EPOCH_STAKE)
+                    .where(EPOCH_STAKE.EPOCH.in(missing)).groupBy(EPOCH_STAKE.EPOCH)
+                    .fetchMap(EPOCH_STAKE.EPOCH, totalField));
+        }
+        return totals;
+    }
+
+    private record PoolHistoryStake(BigInteger amount, Integer delegators) {
     }
 
     private String mapHistoryRewardsValue(BigInteger rewards) {

@@ -6,6 +6,7 @@ BEGIN READ ONLY;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
+SET LOCAL jit = off;
 WITH b AS MATERIALIZED (
   SELECT hash, number, slot, epoch, prev_hash, block_time, no_of_txs, total_output, total_fees
   FROM yaci_store.block WHERE epoch = :e

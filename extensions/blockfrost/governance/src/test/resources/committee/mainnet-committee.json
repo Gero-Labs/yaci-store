@@ -1,0 +1,82 @@
+{
+  "gov_action_id": "gov_action1w2w64uhelz0cg2np7m37hal905tdd7jpzm3fcyc3g7qvkwgfppgqqfsggt5",
+  "proposal_tx_hash": "729daaf2f9f89f842a61f6e3ebf7e57d16d6fa4116e29c13114780cb39090850",
+  "proposal_index": 0,
+  "is_dissolved": false,
+  "quorum": {
+    "numerator": 2,
+    "denominator": 3
+  },
+  "members": [
+    {
+      "cc_cold_id": "cc_cold1zg90nyz8hjgwpkg8x3n4fzse4pggndmxuultspm53g4dxcgjkqykp",
+      "cc_cold_hex": "0af99047bc90e0d9073467548a19a85089b766e73eb807748a2ad361",
+      "cc_cold_has_script": false,
+      "cc_hot_id": "cc_hot1q2ccqmm64956nc65aw65gcn9354c3ldlfqp03qh2v2y5ueqhzw8g4",
+      "cc_hot_hex": "b1806f7aa969a9e354ebb54462658d2b88fdbf4802f882ea62894e64",
+      "cc_hot_has_script": false,
+      "status": "authorized",
+      "expiration_epoch": 799
+    },
+    {
+      "cc_cold_id": "cc_cold1zgf5jdusmxcrfqapu8ngf6j04u0wfzjc7sp9wnnlyfr0f4q68as9w",
+      "cc_cold_hex": "13493790d9b03483a1e1e684ea4faf1ee48a58f402574e7f2246f4d4",
+      "cc_cold_has_script": false,
+      "cc_hot_id": "cc_hot1qf5tkz6zwcpplq3kgpt2486d8za943vmymqkdjl249qgw3s2y5r9y",
+      "cc_hot_hex": "68bb0b4276021f82364056aa9f4d38ba5ac59b26c166cbeaa9408746",
+      "cc_hot_has_script": false,
+      "status": "authorized",
+      "expiration_epoch": 799
+    },
+    {
+      "cc_cold_id": "cc_cold1zvt0am7zyhsx7adreytlf2js4nlaua33agp42usl9tqj2ssazjmn9",
+      "cc_cold_hex": "16feefc225e06f75a3c917f4aa50acffde7631ea0355721f2ac12542",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qwz0aw5583t56fvcg96ulqjhjk0xkwsuvs2rmp0xflhkh4g5e22ce",
+      "cc_hot_hex": "84feba943c574d25984175cf8257959e6b3a1c64143d85e64fef6bd5",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 799
+    },
+    {
+      "cc_cold_id": "cc_cold1zvvcpkl3443ykr94gyp4nddtzngqs4sejjnv9dk98747cqqeatx67",
+      "cc_cold_hex": "1980dbf1ad624b0cb5410359b5ab14d008561994a6c2b6c53fabec00",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qdjx6xe6e9zk3fpzk6rakmz84n0cf8ckwjvz4e8e5j2tuscr7ckq4",
+      "cc_hot_hex": "646d1b3ac94568a422b687db6c47acdf849f1674982ae4f9a494be43",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 726
+    },
+    {
+      "cc_cold_id": "cc_cold1zd7rfcpypwzq98sfxt673kq67s4x8a2aumdrrutwrxcltdq9jkwn2",
+      "cc_cold_hex": "7c34e0240b84029e0932f5e8d81af42a63f55de6da31f16e19b1f5b4",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qgsl88anw66s9yg9hqzux6yujm3wwgcd8mjdt92pp7qn7nqcsc3nq",
+      "cc_hot_hex": "21f39fb376b5029105b805c3689c96e2e7230d3ee4d595410f813f4c",
+      "cc_hot_has_script": false,
+      "status": "authorized",
+      "expiration_epoch": 799
+    },
+    {
+      "cc_cold_id": "cc_cold1zwz2a08a8cqdp7r6lyv0cj67qqf47sr7x7vf8hm705ujc6s4m87eh",
+      "cc_cold_hex": "84aebcfd3e00d0f87af918fc4b5e00135f407e379893df7e7d392c6a",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qvh20fuwhy2dnz9e6d5wmzysduaunlz5y9n8m6n2xen3pmqqvyw8v",
+      "cc_hot_hex": "2ea7a78eb914d988b9d368ed88906f3bc9fc5421667dea6a366710ec",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 726
+    },
+    {
+      "cc_cold_id": "cc_cold1zwt49epsdedwsezyr5ssvnmez96v3d3xrxdcu7j9l8srk3g5xu74h",
+      "cc_cold_hex": "9752e4306e5ae864441d21064f791174c8b626199b8e7a45f9e03b45",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qdc65ke6jfq2q25fcn3g89tea30tvrzpptc2tw6g8cdc7pqtmus0y",
+      "cc_hot_hex": "71aa5b3a9240a02a89c4e2839579ec5eb60c410af0a5bb483e1b8f04",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 726
+    }
+  ]
+}

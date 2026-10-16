@@ -1,5 +1,8 @@
 import org.gradle.api.publish.maven.MavenPublication
 
+// Testcontainers 1.19 from the Boot BOM cannot use Docker Engine 29.
+ext['testcontainers.version'] = '1.21.4'
+
 dependencies {
     api project(":extensions:blockfrost:blockfrost-common")
     api project(":stores:staking")
@@ -9,6 +12,9 @@ dependencies {
     testImplementation project(":aggregates:adapot")
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    testRuntimeOnly 'org.postgresql:postgresql:42.7.1'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
 
 publishing {

@@ -96,6 +96,17 @@ class TxEvaluationServiceTest {
                 .hasMessageContaining("store.cardano.ogmios-url");
     }
 
+    @Test
+    void blockfrostUsesConfiguredOgmiosWithoutChangingNativeScalusMode() throws Exception {
+        byte[] cbor = new byte[]{(byte) 0x83, 0, 0, 0};
+        JsonNode utxos = objectMapper.readTree("[]");
+        when(ogmiosServiceProvider.getIfAvailable()).thenReturn(ogmiosService);
+        when(ogmiosService.evaluateBlockfrostTransaction(same(cbor), same(utxos))).thenReturn(Either.right(success));
+        assertThat(service(new TxEvaluationProperties()).evaluateBlockfrostTx(cbor, utxos).get()).isSameAs(success);
+        verify(ogmiosService).evaluateBlockfrostTransaction(same(cbor), same(utxos));
+        verifyNoInteractions(scalusTxEvaluationService);
+    }
+
     private TxEvaluationService service(TxEvaluationProperties properties) {
         return new TxEvaluationService(properties, ogmiosServiceProvider, scalusTxEvaluationService, objectMapper);
     }

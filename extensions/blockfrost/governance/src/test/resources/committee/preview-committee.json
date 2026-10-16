@@ -1,0 +1,42 @@
+{
+  "gov_action_id": "gov_action1qmwtvr6tdmncqf9af3uh368qjdphjqce3ncxc0zaxjlcy5ffh3esqspcnu4",
+  "proposal_tx_hash": "06dcb60f4b6ee78024bd4c7978e8e093437903198cf06c3c5d34bf825129bc73",
+  "proposal_index": 0,
+  "is_dissolved": false,
+  "quorum": {
+    "numerator": 2,
+    "denominator": 3
+  },
+  "members": [
+    {
+      "cc_cold_id": "cc_cold1zd4qek2k8yyxjfrqgylq30hjdmdqye0vywrgl52kp4wdgtc7h4max",
+      "cc_cold_hex": "6a0cd9563908692460413e08bef26eda0265ec23868fd1560d5cd42f",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qvlv6tkpnr6q46enfrxa0dkvfxrt3ylfn4qfse3hdruj7as2x8xlw",
+      "cc_hot_hex": "3ecd2ec198f40aeb3348cdd7b6cc4986b893e99d4098663768f92f76",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 1720
+    },
+    {
+      "cc_cold_id": "cc_cold1zwyxvk09h4ptznyvjzwzz7yr0u8xztlvrs6xjd52ewjwxvgzsgm8m",
+      "cc_cold_hex": "886659e5bd42b14c8c909c2178837f0e612fec1c3469368acba4e331",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qws37k2dxqz29fqt3qmcwfyn54phn6yf3harhxz86y27yzsad99w7",
+      "cc_hot_hex": "a11f594d3004a2a40b8837872493a54379e8898dfa3b9847d115e20a",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 1720
+    },
+    {
+      "cc_cold_id": "cc_cold1zwly6ea9mkx7f92re3yf4j5jpgmhafa8axz4ezf56vl9wegvxeglm",
+      "cc_cold_hex": "be4d67a5dd8de49543cc489aca920a377ea7a7e9855c8934d33e5765",
+      "cc_cold_has_script": true,
+      "cc_hot_id": "cc_hot1qwued2ae8deecuxtzu2zqqxphxva2gzw8v22lcxjpcjd4tqrqgmmy",
+      "cc_hot_hex": "b996abb93b739c70cb17142000c1b999d5204e3b14afe0d20e24daac",
+      "cc_hot_has_script": true,
+      "status": "authorized",
+      "expiration_epoch": 1720
+    }
+  ]
+}

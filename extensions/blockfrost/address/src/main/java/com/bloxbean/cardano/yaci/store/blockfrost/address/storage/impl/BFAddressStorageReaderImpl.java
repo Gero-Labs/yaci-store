@@ -89,46 +89,21 @@ public class BFAddressStorageReaderImpl implements BFAddressStorageReader {
         int offset = Math.max(page, 0) * count;
         Table<?> combinedTx = buildAddressTxTable(address);
         Field<String> combinedTxHash = combinedTx.field("tx_hash", String.class);
-        Field<Long> combinedBlock = combinedTx.field("block", Long.class);
-
         BlockRef fromRef = parseBlockRef(from);
         BlockRef toRef = parseBlockRef(to);
-
-        Field<Long> pageBlock = DSL.max(combinedBlock).as("blockHeight");
-        SortField<?> pageBlockOrder = order == Order.desc ? pageBlock.desc() : pageBlock.asc();
-        SortField<?> pageHashOrder = order == Order.desc ? combinedTxHash.desc() : combinedTxHash.asc();
-
-        List<String> pagedTxHashes = dsl.select(combinedTxHash, pageBlock)
-                .from(combinedTx)
-                .where(buildBlockRangeCondition(combinedBlock, fromRef, toRef))
-                .groupBy(combinedTxHash)
-                .orderBy(pageBlockOrder, pageHashOrder)
-                .limit(count)
-                .offset(offset)
-                .queryTimeout(QUERY_TIMEOUT_SECONDS)
-                .fetch(combinedTxHash);
-
-        if (pagedTxHashes.isEmpty()) {
-            return List.of();
-        }
-
         Field<Long> txIndexSelect = DSL.coalesce(TRANSACTION.TX_INDEX, 0).cast(Long.class).as("txIndex");
         SortField<?> blockOrder = order == Order.desc ? TRANSACTION.BLOCK.desc() : TRANSACTION.BLOCK.asc();
         SortField<?> txIndexOrder = order == Order.desc ? txIndexSelect.desc() : txIndexSelect.asc();
-
-        return dsl.select(
-                TRANSACTION.TX_HASH.as("txHash"),
-                txIndexSelect,
-                TRANSACTION.BLOCK.as("blockHeight"),
-                TRANSACTION.BLOCK_TIME.as("blockTime")
-        )
-        .from(TRANSACTION)
-        .where(TRANSACTION.TX_HASH.in(pagedTxHashes))
-        .and(buildRangeCondition(fromRef, toRef))
-        .orderBy(blockOrder, txIndexOrder)
-        .queryTimeout(QUERY_TIMEOUT_SECONDS)
-        .fetchInto(BFAddressTransactionDTO.class);
-}
+        // Resolve transaction positions and inclusive range before selecting the page.
+        // Sorting a hash-selected page later drops legitimate same-block entries.
+        return dsl.selectDistinct(TRANSACTION.TX_HASH.as("txHash"),txIndexSelect,
+                        TRANSACTION.BLOCK.as("blockHeight"),TRANSACTION.BLOCK_TIME.as("blockTime"))
+                .from(TRANSACTION)
+                .join(combinedTx).on(TRANSACTION.TX_HASH.eq(combinedTxHash))
+                .where(buildRangeCondition(fromRef,toRef))
+                .orderBy(blockOrder,txIndexOrder).limit(count).offset(offset)
+                .queryTimeout(QUERY_TIMEOUT_SECONDS).fetchInto(BFAddressTransactionDTO.class);
+    }
 
     @Override
     public List<AddressUtxo> findAddressUtxos(String address, int page, int count, Order order) {

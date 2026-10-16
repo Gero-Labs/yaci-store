@@ -6,6 +6,7 @@ BEGIN READ ONLY;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
+SET LOCAL jit = off;
 WITH b AS MATERIALIZED (
  SELECT b.block_no AS number, encode(b.hash,'hex') AS hash, b.slot_no AS slot,
         extract(epoch from b.time)::bigint AS block_time, b.tx_count AS no_of_txs,

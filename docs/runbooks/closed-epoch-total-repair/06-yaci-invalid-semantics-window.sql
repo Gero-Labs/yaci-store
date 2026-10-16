@@ -8,6 +8,7 @@ BEGIN READ ONLY;
 SET LOCAL statement_timeout = '10s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
+SET LOCAL jit = off;
 WITH x AS MATERIALIZED (
  SELECT t.tx_hash, t.block, t.slot, t.fee, t.total_collateral, t.collateral_inputs,
         t.collateral_return_json, i.tx_hash AS invalid_log_hash, i.transaction->'body' AS body,

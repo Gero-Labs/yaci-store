@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute immutable operator SQL against isolated, disposable PostgreSQL 16."""
+"""Execute operator SQL only in a marked PostgreSQL fixture owned by Testcontainers."""
 from pathlib import Path
 from decimal import Decimal
 import hashlib
@@ -8,10 +8,12 @@ import subprocess
 import time
 import argparse
 import tempfile
-import uuid
+import os
+import re
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output-directory', type=Path, help='Evidence directory outside the repository; defaults to a temporary directory')
+parser.add_argument('--testcontainer', required=True, help='ID of the Testcontainers-owned fixture container')
 options = parser.parse_args()
 ROOT = (options.output_directory or Path(tempfile.mkdtemp(prefix='yaci-epoch-repair-validation-'))).resolve()
 KIT = Path(__file__).resolve().parents[1]
@@ -19,7 +21,15 @@ repository = KIT.parents[2]
 if ROOT == repository or repository in ROOT.parents:
     parser.error('--output-directory must be outside the repository')
 ROOT.mkdir(parents=True, exist_ok=True)
-CONTAINER = 'codex-epoch-repair-clone-' + uuid.uuid4().hex[:12]
+CONTAINER = options.testcontainer
+if not re.fullmatch(r'[0-9a-f]{12,64}', CONTAINER):
+    parser.error('--testcontainer must be a Docker container ID')
+FIXTURE_TOKEN = os.environ.get('YACI_REPAIR_FIXTURE_TOKEN', '')
+if not re.fullmatch(r'[0-9a-f]{32}', FIXTURE_TOKEN):
+    parser.error('The Testcontainers fixture marker is required')
+DATABASE = 'repair_test'
+USERNAME = 'repair_test'
+PSQL_ENV = dict(os.environ, PGPASSWORD=os.environ.get('YACI_REPAIR_FIXTURE_PASSWORD', ''))
 LOGS = ROOT / 'logs'
 LOGS.mkdir(exist_ok=True)
 RESULTS = []
@@ -29,10 +39,10 @@ HASHES = {name: hashlib.sha256((KIT / name).read_bytes()).hexdigest() for name i
     '08-block-repair-candidates.sql', '09-apply-reviewed-block-window.sql', '10-apply-reviewed-epoch.sql']}
 
 def command(args, stdin=None):
-    return subprocess.run(args, input=stdin, text=True, capture_output=True)
+    return subprocess.run(args, input=stdin, text=True, capture_output=True, env=PSQL_ENV)
 
 def psql(sql, variables=None, label=None):
-    args = ['docker', 'exec', '-i', CONTAINER, 'psql', '-X', '-U', 'postgres', '-d', 'repair_test', '-At', '-F', '|', '-v', 'ON_ERROR_STOP=1']
+    args = ['docker', 'exec', '-i', CONTAINER, 'psql', '-X', '-U', USERNAME, '-d', DATABASE, '-At', '-F', '|', '-v', 'ON_ERROR_STOP=1']
     for key, value in (variables or {}).items():
         args.extend(['-v', f'{key}={value}'])
     result = command(args, sql)
@@ -237,8 +247,8 @@ def seeded_collateral_body_proof(name, mutation):
 
 def start_holder(sql):
     tag='epoch-clone-lock-holder'
-    args=['docker','exec','-i',CONTAINER,'psql','-X','-U','postgres','-d','repair_test','-At','-v','ON_ERROR_STOP=1']
-    holder=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    args=['docker','exec','-i',CONTAINER,'psql','-X','-U',USERNAME,'-d',DATABASE,'-At','-v','ON_ERROR_STOP=1']
+    holder=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=PSQL_ENV)
     holder.stdin.write("SET application_name='"+tag+"'; BEGIN; "+sql+"; SELECT pg_sleep(30); ROLLBACK;\n")
     holder.stdin.close()
     for _ in range(100):
@@ -283,20 +293,18 @@ def lock_order_upgrade_refusal():
     finally: release_holder(holder,tag)
 
 def main():
-    inspected=command(['docker','inspect',CONTAINER])
-    if inspected.returncode==0:
-        raise RuntimeError('Container name already exists; refusing to overwrite an existing container')
-    start=command(['docker','run','--detach','--name',CONTAINER,'--network','none',
-                   '--label','codex.task=epoch-repair-clone-validation','--tmpfs','/var/lib/postgresql/data',
-                   '-e','POSTGRES_HOST_AUTH_METHOD=trust','-e','POSTGRES_DB=repair_test','postgres:16'])
-    assert start.returncode==0,start.stderr
-    (ROOT/'container-id.txt').write_text(start.stdout.strip()+'\n')
+    inspected = command(['docker', 'inspect', CONTAINER])
+    if inspected.returncode:
+        raise RuntimeError('Fixture container is unavailable')
+    info = json.loads(inspected.stdout)[0]
+    labels = info.get('Config', {}).get('Labels') or {}
+    if labels.get('org.testcontainers') != 'true':
+        raise RuntimeError('Refusing a container not owned by Testcontainers')
+    marker = scalar('SELECT token FROM public.codex_repair_test_fixture;')
+    if marker != FIXTURE_TOKEN:
+        raise RuntimeError('Fixture marker does not match; refusing destructive test setup')
+    (ROOT/'container-id.txt').write_text(CONTAINER+'\n')
     try:
-        for _ in range(120):
-            r=psql('SELECT 1;')
-            status=command(['docker','exec',CONTAINER,'sh','-c','test -f /var/lib/postgresql/data/postmaster.pid && test "$(head -1 /var/lib/postgresql/data/postmaster.pid)" = 1'])
-            if r.returncode==0 and status.returncode==0: break
-            time.sleep(.25)
         version=scalar('SELECT version();')
         reset(); rows=candidates('baseline-candidates')
         (ROOT/'baseline-reviewed-blocks.json').write_text(json.dumps(rows,indent=2)+'\n')
@@ -384,7 +392,7 @@ def main():
         lock_refusal('refuse-held-writer-during-epoch-repair','yaci_store.block',epoch=True)
         phantom_insert_refusal()
         lock_order_upgrade_refusal()
-        result=dict(postgresql_version=version,container_network='none',production_contacted=False,
+        result=dict(postgresql_version=version,container_owner='Testcontainers',production_contacted=False,
                     sql_sha256=HASHES,cases=RESULTS,passed=sum(x['passed'] for x in RESULTS),
                     failed=sum(not x['passed'] for x in RESULTS),defects=sum(x['defect'] for x in RESULTS))
         (ROOT/'results.json').write_text(json.dumps(result,indent=2)+'\n')
@@ -392,8 +400,7 @@ def main():
         if result['failed']:
             raise SystemExit(1)
     finally:
-        cleanup=command(['docker','rm','--force',CONTAINER])
-        (ROOT/'cleanup.txt').write_text(cleanup.stdout+cleanup.stderr)
+        (ROOT/'cleanup.txt').write_text('Container lifecycle remains with the Testcontainers test.\n')
 
 if __name__=='__main__':
     main()

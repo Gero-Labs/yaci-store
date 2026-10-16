@@ -5,6 +5,7 @@ BEGIN READ ONLY;
 SET LOCAL statement_timeout = '5s';
 SET LOCAL lock_timeout = '1s';
 SET LOCAL max_parallel_workers_per_gather = 0;
+SET LOCAL jit = off;
 SELECT current_database(), current_user, current_setting('transaction_read_only');
 SELECT table_name, column_name, data_type, udt_name
 FROM information_schema.columns

@@ -7,5 +7,7 @@ import java.util.List;
 
 public interface BFMetadataStorageReader {
 
+    List<com.bloxbean.cardano.yaci.store.metadata.domain.TxMetadataLabel> findByLabel(String label, int page, int count, Order order);
+
     List<BFMetadataLabelDto> findLabelsWithCount(int page, int count, Order order);
 }

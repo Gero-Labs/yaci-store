@@ -64,6 +64,48 @@ public class OgmiosService {
         return ogmiosUrl;
     }
 
+    /** The BF caller supplies an Ogmios-v6 UTxO array; do not silently replace it with []. */
+    public Either<JsonNode, JsonNode> evaluateBlockfrostTransaction(byte[] cbor, JsonNode additionalUtxoSet) throws ApiException {
+        ObjectNode request = objectMapper.createObjectNode();
+        request.put("jsonrpc", "2.0");
+        request.put("method", "evaluateTransaction");
+        ObjectNode params = request.putObject("params");
+        params.putObject("transaction").put("cbor", HexUtil.encodeHexString(cbor));
+        params.set("additionalUtxoSet", additionalUtxoSet == null ? objectMapper.createArrayNode() : additionalUtxoSet);
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Content-Type", "application/json");
+        try {
+            var response = restTemplate.postForEntity(getOgmiosUrl(), new HttpEntity<>(request.toString(), headers), String.class);
+            JsonNode result = objectMapper.readTree(response.getBody());
+            return blockfrostEvaluationResult(result);
+        } catch (HttpServerErrorException unavailable) {
+            throw new ApiException("Ogmios evaluation is unavailable", unavailable);
+        } catch (HttpClientErrorException error) {
+            if (error.getStatusCode().value() == 429) {
+                throw new ApiException("Ogmios evaluation is unavailable", error);
+            }
+            try {
+                return blockfrostEvaluationResult(objectMapper.readTree(error.getResponseBodyAsString()));
+            } catch (JsonProcessingException malformed) {
+                throw new ApiException("Ogmios returned an invalid evaluation response", malformed);
+            }
+        } catch (Exception error) {
+            throw new ApiException("Ogmios evaluation is unavailable", error);
+        }
+    }
+
+    private Either<JsonNode, JsonNode> blockfrostEvaluationResult(JsonNode response) throws ApiException {
+        if (response != null && response.isObject()) {
+            if (response.path("result").isArray()) {
+                return Either.right(response);
+            }
+            if (response.path("error").isObject() && response.path("error").has("code")) {
+                return Either.left(response);
+            }
+        }
+        throw new ApiException("Ogmios returned an invalid evaluation response");
+    }
+
     public Either<JsonNode, JsonNode> evaluateTransactionViaJsonRpc(byte[] cbor, List<Object> additionalUtxoSet) throws ApiException {
         String evaluateTransactionEndpoint = getOgmiosUrl();
 

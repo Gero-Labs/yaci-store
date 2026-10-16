@@ -4,6 +4,7 @@ import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAss
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetHistory;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetInfo;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetTransaction;
+import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetUtxo;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFPolicyAsset;
 import com.bloxbean.cardano.yaci.store.common.model.Order;
 
@@ -14,6 +15,11 @@ public interface BFAssetStorageReader {
     List<BFPolicyAsset> findAssets(int page, int count, Order order);
 
     Optional<BFAssetInfo> findAssetInfo(String unit);
+
+    boolean assetExists(String unit, BFAssetQueryDeadline deadline);
+
+    List<BFAssetUtxo> findAssetUtxos(String unit, int page, int count, Order order, Long fromHeight, Long toHeight,
+                                   BFAssetQueryDeadline deadline);
 
     List<BFAssetHistory> findAssetHistory(String unit, int page, int count, Order order);
 

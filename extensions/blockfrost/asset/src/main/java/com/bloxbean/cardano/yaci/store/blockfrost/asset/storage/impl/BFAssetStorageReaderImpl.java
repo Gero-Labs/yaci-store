@@ -1,10 +1,12 @@
 package com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl;
 
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.BFAssetStorageReader;
+import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.BFAssetQueryDeadline;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetAddress;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetHistory;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetInfo;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetTransaction;
+import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFAssetUtxo;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.storage.impl.model.BFPolicyAsset;
 import com.bloxbean.cardano.yaci.store.blockfrost.common.util.AmountsJsonUtil;
 import com.bloxbean.cardano.yaci.store.blockfrost.common.util.BlockfrostDialectUtil;
@@ -23,6 +25,8 @@ import org.jooq.impl.DSL;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -58,6 +62,67 @@ public class BFAssetStorageReaderImpl implements BFAssetStorageReader {
     public BFAssetStorageReaderImpl(DSLContext dsl) {
         this.dsl = dsl;
         this.readUnspentTable = false;
+    }
+
+    @Override
+    public boolean assetExists(String unit, BFAssetQueryDeadline deadline) {
+        var boundedDsl = deadline.context(dsl);
+        return deadline.execute(() -> boundedDsl.selectOne().from(ASSETS).where(buildAssetCondition(unit))
+                .limit(1).queryTimeout(deadline.timeoutSeconds()).fetchOne() != null);
+    }
+
+    @Override
+    public List<BFAssetUtxo> findAssetUtxos(String unit, int page, int count, Order order,
+                                          Long fromHeight, Long toHeight, BFAssetQueryDeadline deadline) {
+        var boundedDsl = deadline.context(dsl);
+        Table<?> outputs = DSL.table(DSL.name(readUnspentTable ? "address_utxo_unspent" : "address_utxo")).as("au");
+        Field<String> txHash = DSL.field(DSL.name("au", "tx_hash"), String.class);
+        Field<Integer> outputIndex = DSL.field(DSL.name("au", "output_index"), Integer.class);
+        Field<Long> slot = DSL.field(DSL.name("au", "slot"), Long.class);
+        Field<Long> height = DSL.field(DSL.name("au", "block"), Long.class);
+        Field<String> address = DSL.coalesce(DSL.field(DSL.name("au", "owner_addr_full"), String.class),
+                DSL.field(DSL.name("au", "owner_addr"), String.class));
+        Field<Long> lovelace = DSL.field(DSL.name("au", "lovelace_amount"), Long.class);
+        Field<String> amounts = DSL.field(DSL.name("au", "amounts")).cast(String.class);
+        Field<String> blockHash = DSL.field(DSL.name("au", "block_hash"), String.class);
+        Field<Long> blockTime = DSL.field(DSL.name("au", "block_time"), Long.class);
+        Field<String> dataHash = DSL.field(DSL.name("au", "data_hash"), String.class);
+        Field<String> inlineDatum = DSL.field(DSL.name("au", "inline_datum"), String.class);
+        Field<String> referenceScriptHash = DSL.field(DSL.name("au", "reference_script_hash"), String.class);
+        Condition currentAsset = BlockfrostDialectUtil.isPostgres(dsl)
+                ? DSL.condition("{0} @> {1}::jsonb", DSL.field(DSL.name("au", "amounts")),
+                        DSL.val("[{\"unit\":\"" + unit + "\"}]"))
+                : amounts.contains("\"unit\":\"" + unit + "\"")
+                        .or(amounts.contains("\"unit\": \"" + unit + "\""));
+        if (!readUnspentTable) {
+            currentAsset = currentAsset.andNotExists(boundedDsl.selectOne().from(TX_INPUT)
+                    .where(TX_INPUT.TX_HASH.eq(txHash)).and(TX_INPUT.OUTPUT_INDEX.eq(outputIndex)));
+        }
+        if (fromHeight != null) currentAsset = currentAsset.and(height.ge(fromHeight));
+        if (toHeight != null) currentAsset = currentAsset.and(height.le(toHeight));
+        // A missing canonical position cannot be replaced by hash order. The window is evaluated on the
+        // filtered candidate set before pagination, so later nonempty pages cannot hide a missing index.
+        Field<Integer> missingPosition = DSL.count().filterWhere(TRANSACTION.TX_INDEX.isNull()
+                .or(TRANSACTION.TX_INDEX.lt(0)).or(slot.isNull())).over().as("missing_position");
+        boolean descending = order == Order.desc;
+        var query = boundedDsl.select(address, txHash, outputIndex, lovelace, amounts, blockHash, height,
+                        blockTime, dataHash, inlineDatum, referenceScriptHash, missingPosition)
+                .from(outputs).leftJoin(TRANSACTION)
+                .on(TRANSACTION.TX_HASH.eq(txHash).and(TRANSACTION.SLOT.eq(slot)))
+                .where(currentAsset)
+                .orderBy(descending ? slot.desc() : slot.asc(),
+                        descending ? TRANSACTION.TX_INDEX.desc() : TRANSACTION.TX_INDEX.asc(),
+                        descending ? outputIndex.desc() : outputIndex.asc())
+                .limit(count).offset((long) Math.max(page, 0) * count);
+        logQuery("findAssetUtxos", query);
+        return deadline.execute(() -> query.queryTimeout(deadline.timeoutSeconds()).fetch(row -> {
+            if (row.get(missingPosition) != 0) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Asset transaction position unavailable");
+            }
+            return new BFAssetUtxo(row.get(address), row.get(txHash), row.get(outputIndex),
+                row.get(lovelace), row.get(amounts), row.get(blockHash), row.get(height), row.get(blockTime),
+                row.get(dataHash), row.get(inlineDatum), row.get(referenceScriptHash));
+        }));
     }
 
     /**

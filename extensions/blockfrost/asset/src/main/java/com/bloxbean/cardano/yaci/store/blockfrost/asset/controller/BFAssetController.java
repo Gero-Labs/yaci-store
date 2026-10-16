@@ -6,6 +6,7 @@ import com.bloxbean.cardano.yaci.store.blockfrost.asset.dto.BFAssetDTO;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.dto.BFAssetDetailDTO;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.dto.BFAssetHistoryDTO;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.dto.BFAssetTransactionDTO;
+import com.bloxbean.cardano.yaci.store.blockfrost.asset.dto.BFAssetUtxoDTO;
 import com.bloxbean.cardano.yaci.store.blockfrost.asset.service.BFAssetService;
 import com.bloxbean.cardano.yaci.store.common.model.Order;
 import io.swagger.v3.oas.annotations.Operation;
@@ -92,6 +93,17 @@ public class BFAssetController {
                                                      @RequestParam(required = false, defaultValue = "asc") Order order) {
         int p = page - 1;
         return bfAssetService.getAssetAddresses(asset, p, count, order);
+    }
+
+    @GetMapping("{asset}/utxos")
+    @Operation(summary = "Asset UTxOs", description = "List of unspent transaction outputs containing a specific asset")
+    public List<BFAssetUtxoDTO> getAssetUtxos(@PathVariable String asset,
+                                            @RequestParam(required = false, defaultValue = "100") @Min(1) @Max(100) int count,
+                                            @RequestParam(required = false, defaultValue = "1") @Min(1) @Max(21474836) int page,
+                                            @RequestParam(required = false, defaultValue = "asc") Order order,
+                                            @RequestParam(required = false) String from,
+                                            @RequestParam(required = false) String to) {
+        return bfAssetService.getAssetUtxos(asset, page - 1, count, order, from, to);
     }
 
     @GetMapping("policy/{policy_id}")

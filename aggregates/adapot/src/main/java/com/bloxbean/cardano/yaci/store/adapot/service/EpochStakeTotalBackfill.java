@@ -52,7 +52,7 @@ public class EpochStakeTotalBackfill {
                     // statement; server limits also cancel lock/scan work.
                     jdbc.queryForObject("SELECT set_config('statement_timeout', :timeout, true)",
                             Map.of("timeout", transaction.getTimeout() + "s"), String.class);
-                    jdbc.queryForObject("SELECT set_config('lock_timeout', '1s', true)", Map.of(), String.class);
+                    jdbc.queryForObject("SELECT set_config('lock_timeout', '250ms', true)", Map.of(), String.class);
                 }
                 totals.lock();
                 var next = totals.findNextMissingSnapshot();

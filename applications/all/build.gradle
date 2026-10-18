@@ -137,3 +137,26 @@ tasks.named("bootJar") {
         attributes 'Main-Class': 'org.springframework.boot.loader.launch.PropertiesLauncher'
     }
 }
+
+// The resolver compiles against a redirect guard hook absent from Boot's older BOM.
+def verifyDrepAnchorHttpRuntime = tasks.register('verifyDrepAnchorHttpRuntime') {
+    group = 'verification'
+    description = 'Checks the HTTP libraries packaged with the native DRep resolver.'
+    doLast {
+        def expected = [
+            'org.apache.httpcomponents.client5:httpclient5': '5.6.4',
+            'org.apache.httpcomponents.core5:httpcore5': '5.4.3',
+            'org.apache.httpcomponents.core5:httpcore5-h2': '5.4.3'
+        ]
+        def actual = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collectEntries {
+            [("${it.moduleVersion.id.group}:${it.name}".toString()): it.moduleVersion.id.version]
+        }
+        expected.each { module, version ->
+            if (actual[module] != version) {
+                throw new GradleException("DRep anchor resolver runtime requires ${module}:${version}; resolved ${actual[module]}")
+            }
+        }
+    }
+}
+tasks.named('check') { dependsOn verifyDrepAnchorHttpRuntime }
+tasks.named('bootJar') { dependsOn verifyDrepAnchorHttpRuntime }

@@ -67,7 +67,7 @@ class DRepAnchorResolverConfigurationTest {
                     } finally { probe.release.countDown(); }
                 });
     }
-    @org.springframework.context.annotation.Configuration
+    // Registered explicitly by ApplicationContextRunner; keep it out of GovernanceStoreConfiguration scanning.
     @org.springframework.scheduling.annotation.EnableScheduling
     static class SchedulingProbe {
         @org.springframework.context.annotation.Bean ProbeJobs probeJobs() { return new ProbeJobs(); }

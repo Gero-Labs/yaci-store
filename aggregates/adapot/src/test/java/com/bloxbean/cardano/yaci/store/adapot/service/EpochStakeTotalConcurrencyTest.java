@@ -12,9 +12,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -108,7 +110,17 @@ class EpochStakeTotalConcurrencyTest {
         jdbc.execute("insert into epoch values (634)");
         // Spring binds the connection and SET LOCAL limits by DataSource identity.
         // Use the same bean as totals, matching the application's injected wiring.
-        var backfill = new EpochStakeTotalBackfill(totals, new NamedParameterJdbcTemplate(dataSource),
+        var limits = new AtomicReference<Map<String, String>>();
+        var observedTotals = new EpochStakeTotalService(new NamedParameterJdbcTemplate(dataSource)) {
+            @Override
+            public void lock() {
+                limits.set(Map.of(
+                        "statement_timeout", jdbc.queryForObject("SHOW statement_timeout", String.class),
+                        "lock_timeout", jdbc.queryForObject("SHOW lock_timeout", String.class)));
+                super.lock();
+            }
+        };
+        var backfill = new EpochStakeTotalBackfill(observedTotals, new NamedParameterJdbcTemplate(dataSource),
                 new DataSourceTransactionManager(dataSource), org.jooq.impl.DSL.using(org.jooq.SQLDialect.POSTGRES), 3);
         var locked = new CountDownLatch(1);
         var release = new CountDownLatch(1);
@@ -121,7 +133,9 @@ class EpochStakeTotalConcurrencyTest {
             assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
             var attempt = executor.submit(backfill::backfillNext);
             try {
-                attempt.get(4, TimeUnit.SECONDS); // PG lock_timeout is 1s.
+                attempt.get(4, TimeUnit.SECONDS);
+                assertThat(limits.get()).containsEntry("statement_timeout", "3s")
+                        .containsEntry("lock_timeout", "250ms");
                 assertThat(jdbc.queryForObject("select count(*) from epoch_stake_total", Long.class)).isZero();
             } finally {
                 release.countDown();

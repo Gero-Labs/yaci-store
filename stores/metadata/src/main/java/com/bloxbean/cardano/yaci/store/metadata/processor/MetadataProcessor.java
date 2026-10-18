@@ -1,9 +1,5 @@
 package com.bloxbean.cardano.yaci.store.metadata.processor;
 
-import co.nstant.in.cbor.model.DataItem;
-import co.nstant.in.cbor.model.UnsignedInteger;
-import com.bloxbean.cardano.yaci.core.util.CborSerializationUtil;
-import com.bloxbean.cardano.yaci.core.util.HexUtil;
 import com.bloxbean.cardano.yaci.store.common.aspect.EnableIf;
 import com.bloxbean.cardano.yaci.store.common.util.StringUtil;
 import com.bloxbean.cardano.yaci.store.events.AuxDataEvent;
@@ -21,7 +17,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigInteger;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -49,7 +44,6 @@ public class MetadataProcessor {
                         && !StringUtil.isEmpty(txAuxDataEvent.getAuxData().getMetadataJson()))
                 .map(txAuxData -> {
                     String json = txAuxData.getAuxData().getMetadataJson();
-                    String cbor = txAuxData.getAuxData().getMetadataCbor();
                     JsonNode jsonNode;
                     try {
                         jsonNode = objectMapper.readTree(json);
@@ -57,7 +51,8 @@ public class MetadataProcessor {
                         throw new IllegalStateException(e);
                     }
 
-                    final Map<String, String> labelToCborMap = getLabelToCborMap(txAuxData.getTxHash(), cbor);
+                    final Map<String, String> labelToCborMap = getLabelToCborMap(txAuxData.getTxHash(),
+                            txAuxData.getAuxData().getCbor(), txAuxData.getAuxData().getMetadataCbor());
 
                     List<TxMetadataLabel> txMetadataLabels = new ArrayList<>();
                     jsonNode.fieldNames().forEachRemaining(fieldName -> {
@@ -91,27 +86,11 @@ public class MetadataProcessor {
         }
     }
 
-    private Map<String, String> getLabelToCborMap(String txHash, String cbor) {
+    private Map<String, String> getLabelToCborMap(String txHash, String auxiliaryCbor, String metadataCbor) {
         try {
-            if (cbor == null || cbor.isEmpty())
-                return Collections.emptyMap();
-
-            co.nstant.in.cbor.model.Map map = (co.nstant.in.cbor.model.Map) CborSerializationUtil.deserializeOne(HexUtil.decodeHexString(cbor));
-            if (map == null)
-                return Collections.emptyMap();
-
-            Map<String, String> result = new HashMap();
-            for (DataItem key : map.getKeys()) {
-                BigInteger biKey = ((UnsignedInteger) key).getValue();
-                DataItem value = map.get(key);
-                co.nstant.in.cbor.model.Map labelMap = new co.nstant.in.cbor.model.Map();
-                labelMap.put(key, value);
-
-                String labelMapCbor = HexUtil.encodeHexString(CborSerializationUtil.serialize(labelMap, false));
-                result.put(biKey.toString(), labelMapCbor);
-            }
-
-            return result;
+            // Older imported events may lack original bytes. Never use that fallback when
+            // original bytes are present but malformed: their ordering cannot be recovered.
+            return MetadataCbor.labels(auxiliaryCbor, metadataCbor);
         } catch (Exception e) {
             log.error("Error getting label to cbor map for tx: " + txHash);
             return Collections.emptyMap();

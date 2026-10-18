@@ -79,8 +79,9 @@ public interface BFDRepMapper {
     @Mapping(target = "hex", expression = "java(addCip129PrefixFromDrepId(registration.getDrepId(), registration.getDrepHash()))")
     @Mapping(target = "url", source = "anchorUrl")
     @Mapping(target = "hash", source = "anchorHash")
-    @Mapping(target = "jsonMetadata", ignore = true)
-    @Mapping(target = "bytes", ignore = true)
+    @Mapping(target = "jsonMetadata", source = "anchorMetadata.json")
+    @Mapping(target = "bytes", source = "anchorMetadata.bytes")
+    @Mapping(target = "error", source = "anchorMetadata.error")
     BFDRepMetadataDto toMetadataDto(DRepRegistration registration);
 
     // ── Named converters ──────────────────────────────────────────────────
@@ -92,10 +93,13 @@ public interface BFDRepMapper {
 
     default BFDRepListMetadataDto toListMetadataDto(BFDRep row) {
         if (row == null || row.getAnchorUrl() == null) return null;
-        // TODO: Populate jsonMetadata and bytes when off-chain governance metadata is indexed.
+        var metadata = row.getAnchorMetadata();
         return BFDRepListMetadataDto.builder()
                 .url(row.getAnchorUrl())
                 .hash(row.getAnchorHash())
+                .jsonMetadata(metadata == null ? null : metadata.json())
+                .bytes(metadata == null ? null : metadata.bytes())
+                .error(metadata == null ? null : metadata.error())
                 .build();
     }
 

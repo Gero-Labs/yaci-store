@@ -17,6 +17,7 @@ import com.bloxbean.cardano.yaci.store.common.domain.GovActionStatus;
 import com.bloxbean.cardano.yaci.store.common.model.Order;
 import com.bloxbean.cardano.yaci.store.governance.domain.DRepRegistration;
 import com.bloxbean.cardano.yaci.store.governance.domain.VotingProcedure;
+import com.bloxbean.cardano.yaci.store.governance.storage.impl.DRepAnchorResolutionStorageImpl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import org.jooq.SortOrder;
 import org.jooq.TableField;
 import org.jooq.impl.DSL;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 
@@ -68,6 +70,12 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
 
     private final DSLContext dsl;
     private final ObjectMapper objectMapper;
+    private DRepAnchorResolutionStorageImpl anchorResolutionStorage;
+
+    @Autowired(required = false)
+    public void setAnchorResolutionStorage(DRepAnchorResolutionStorageImpl storage) {
+        this.anchorResolutionStorage = storage;
+    }
 
     // ────────────────────────────────────────────────────────────────────────
     // Helpers
@@ -170,7 +178,7 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
     private record ProposalKey(String txHash, int index) {
     }
 
-    private record DRepAnchor(String url, String hash) {
+    private record DRepAnchor(String url, String hash, DRepAnchorResolutionStorageImpl.Binding binding) {
     }
 
     private Map<ProposalKey, EnumMap<GovActionStatus, Integer>> fetchProposalStatusEpochs(List<ProposalKey> proposalKeys) {
@@ -480,6 +488,9 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
         Map<String, Boolean> registered = fetchDRepRegistered(drepIds, deadline);
         Map<String, Boolean> scriptFlags = drepIds.isEmpty() ? Map.of() : fetchLatestDRepScriptFlags(drepIds, deadline);
         Map<String, DRepAnchor> anchors = drepIds.isEmpty() ? Map.of() : fetchLatestDRepAnchors(drepIds, deadline);
+        var resolved = anchorResolutionStorage == null ? Map.<DRepAnchorResolutionStorageImpl.Binding,
+                com.bloxbean.cardano.yaci.store.governance.domain.DRepAnchorMetadata>of()
+                : anchorResolutionStorage.readBatch(anchors.values().stream().map(DRepAnchor::binding).toList(), deadline.timeout());
         Map<String, Integer> lastVoteEpochs = drepIds.isEmpty() ? Map.of() : fetchLastDRepVoteEpochs(drepIds, deadline);
         Map<String, Long> specialAmounts = fetchLatestSpecialDRepAmounts(currentEpoch, deadline);
         int drepActivity = fetchDRepActivity(deadline);
@@ -513,6 +524,7 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
             if (anchor != null) {
                 dRep.setAnchorUrl(anchor.url());
                 dRep.setAnchorHash(anchor.hash());
+                dRep.setAnchorMetadata(anchorResolutionStorage == null ? null : resolved.get(anchor.binding()));
             }
         });
     }
@@ -639,17 +651,16 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
                                         DREP_REGISTRATION.CERT_INDEX.desc()))
                                 .as("rn")
                 )
+                .select(anchorResolutionStorage == null ? new Field<?>[]{} : new Field<?>[]{
+                        DREP_REGISTRATION.TX_HASH, DREP_REGISTRATION.CERT_INDEX,
+                        DREP_REGISTRATION.DREP_HASH, DREP_REGISTRATION.CRED_TYPE, DREP_REGISTRATION.SLOT})
                 .from(DREP_REGISTRATION)
                 .where(DREP_REGISTRATION.DREP_ID.in(drepIds))
                 .and(DREP_REGISTRATION.ANCHOR_URL.isNotNull())
                 .asTable("latest_anchor_ranked");
 
         Map<String, DRepAnchor> result = new HashMap<>();
-        dsl.select(
-                        ranked.field(DREP_REGISTRATION.DREP_ID),
-                        ranked.field(DREP_REGISTRATION.ANCHOR_URL),
-                        ranked.field(DREP_REGISTRATION.ANCHOR_HASH)
-                )
+        dsl.select(ranked.fields())
                 .from(ranked)
                 .where(ranked.field("rn", Integer.class).eq(1))
                 .queryTimeout(deadline.timeout()).fetch()
@@ -657,7 +668,16 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
                         record.get(ranked.field(DREP_REGISTRATION.DREP_ID)),
                         new DRepAnchor(
                                 record.get(ranked.field(DREP_REGISTRATION.ANCHOR_URL)),
-                                record.get(ranked.field(DREP_REGISTRATION.ANCHOR_HASH))
+                                record.get(ranked.field(DREP_REGISTRATION.ANCHOR_HASH)),
+                                anchorResolutionStorage == null ? null : new DRepAnchorResolutionStorageImpl.Binding(
+                                        record.get(ranked.field(DREP_REGISTRATION.TX_HASH)),
+                                        record.get(ranked.field(DREP_REGISTRATION.CERT_INDEX)),
+                                        record.get(ranked.field(DREP_REGISTRATION.DREP_ID)),
+                                        record.get(ranked.field(DREP_REGISTRATION.DREP_HASH)),
+                                        record.get(ranked.field(DREP_REGISTRATION.CRED_TYPE)),
+                                        record.get(ranked.field(DREP_REGISTRATION.SLOT)),
+                                        record.get(ranked.field(DREP_REGISTRATION.ANCHOR_URL)),
+                                        record.get(ranked.field(DREP_REGISTRATION.ANCHOR_HASH)))
                         )
                 ));
         return result;
@@ -1105,12 +1125,14 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
 
     @Override
     public Optional<DRepRegistration> findDRepMetadata(BFDRepIdentity identity) {
+        DRepDeadline deadline = new DRepDeadline();
         return dsl.select(
                         DREP_REGISTRATION.TX_HASH,
                         DREP_REGISTRATION.CERT_INDEX,
                         DREP_REGISTRATION.TYPE,
                         DREP_REGISTRATION.DREP_HASH,
                         DREP_REGISTRATION.DREP_ID,
+                        DREP_REGISTRATION.CRED_TYPE,
                         DREP_REGISTRATION.ANCHOR_URL,
                         DREP_REGISTRATION.ANCHOR_HASH,
                         DREP_REGISTRATION.DEPOSIT,
@@ -1124,8 +1146,19 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
                         DREP_REGISTRATION.TX_INDEX.desc(),
                         DREP_REGISTRATION.CERT_INDEX.desc())
                 .limit(1)
+                .queryTimeout(deadline.timeout())
                 .fetchOptional()
-                .map(this::toDRepRegistrationDomain);
+                .map(row -> {
+                    DRepRegistration registration = toDRepRegistrationDomain(row);
+                    if (anchorResolutionStorage != null) {
+                        var binding = new DRepAnchorResolutionStorageImpl.Binding(row.get(DREP_REGISTRATION.TX_HASH),
+                                row.get(DREP_REGISTRATION.CERT_INDEX), row.get(DREP_REGISTRATION.DREP_ID),
+                                row.get(DREP_REGISTRATION.DREP_HASH), row.get(DREP_REGISTRATION.CRED_TYPE),
+                                row.get(DREP_REGISTRATION.SLOT), row.get(DREP_REGISTRATION.ANCHOR_URL), row.get(DREP_REGISTRATION.ANCHOR_HASH));
+                        registration.setAnchorMetadata(anchorResolutionStorage.readBatch(List.of(binding),deadline.timeout()).get(binding));
+                    }
+                    return registration;
+                });
     }
 
     private Condition delegationVoteMatches(BFDRepIdentity identity) {

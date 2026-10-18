@@ -4,6 +4,9 @@ dependencies {
     api project(":components:core")
     api project(":components:client")
     api project(":components:plugin")
+    testImplementation 'org.testcontainers:postgresql'
+    testRuntimeOnly 'org.postgresql:postgresql'
+    testRuntimeOnly 'com.h2database:h2'
 }
 
 publishing {

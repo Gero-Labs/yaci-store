@@ -1120,7 +1120,9 @@ public class BFGovernanceStorageReaderImpl implements BFGovernanceStorageReader 
                 .from(DREP_REGISTRATION)
                 .where(drepRegistrationMatches(identity))
                 .and(DREP_REGISTRATION.ANCHOR_URL.isNotNull())
-                .orderBy(DREP_REGISTRATION.SLOT.desc())
+                .orderBy(DREP_REGISTRATION.SLOT.desc(),
+                        DREP_REGISTRATION.TX_INDEX.desc(),
+                        DREP_REGISTRATION.CERT_INDEX.desc())
                 .limit(1)
                 .fetchOptional()
                 .map(this::toDRepRegistrationDomain);

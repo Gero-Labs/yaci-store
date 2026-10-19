@@ -1,6 +1,10 @@
 package com.bloxbean.cardano.yaci.store.governance.service;
 
 import com.bloxbean.cardano.yaci.store.governance.storage.impl.DRepAnchorResolutionStorageImpl;
+import com.bloxbean.cardano.yaci.store.common.config.StoreProperties;
+import com.bloxbean.cardano.yaci.store.plugin.scheduler.SchedulerConfiguration;
+import com.bloxbean.cardano.yaci.store.plugin.scheduler.SchedulerService;
+import com.bloxbean.cardano.yaci.store.plugin.metrics.PluginMetricsCollector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
@@ -14,6 +18,27 @@ import static org.mockito.Mockito.mock;
 class DRepAnchorResolverConfigurationTest {
     private final ApplicationContextRunner context = new ApplicationContextRunner()
             .withUserConfiguration(DRepAnchorResolverConfiguration.class);
+    @Test void pluginSchedulerServiceStartsAlongsideTheDedicatedResolverScheduler() {
+        context.withUserConfiguration(SchedulerConfiguration.class, SchedulerService.class, SchedulingProbe.class)
+                .withBean(StoreProperties.class, StoreProperties::new)
+                .withBean(PluginMetricsCollector.class, () -> new PluginMetricsCollector(new StoreProperties(), null))
+                .withBean(ObjectMapper.class, ObjectMapper::new)
+                .withBean(DSLContext.class, () -> DSL.using(SQLDialect.POSTGRES))
+                .withBean(DRepAnchorResolutionStorageImpl.class, () -> mock(DRepAnchorResolutionStorageImpl.class))
+                .withPropertyValues("store.governance.anchor-resolver.enabled=true", "store.governance.anchor-resolution-enabled=true")
+                .run(c -> {
+                    assertThat(c).hasNotFailed().hasSingleBean(SchedulerService.class);
+                    assertThat(c.getBean(org.springframework.scheduling.TaskScheduler.class))
+                            .isSameAs(c.getBean("pluginTaskScheduler"));
+                    var probe = c.getBean(ProbeJobs.class);
+                    try {
+                        assertThat(probe.resolverStarted.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                        assertThat(probe.generalRan.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                        assertThat(probe.resolverThread).startsWith("drep-anchor-resolver-");
+                        assertThat(probe.generalThread).startsWith("plugin-scheduler-");
+                    } finally { probe.release.countDown(); }
+                });
+    }
     @Test void defaultsAndPartialFlagsDoNotCreateNetworkOrSchedulerBeans() {
         context.run(c -> assertThat(c).doesNotHaveBean(DRepAnchorResolver.class).doesNotHaveBean(DRepAnchorHttpFetcher.class));
         context.withPropertyValues("store.governance.anchor-resolver.enabled=true")

@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnProperty(name = {"store.governance.anchor-resolver.enabled", "store.governance.anchor-resolution-enabled"}, havingValue = "true")
 @EnableConfigurationProperties(DRepAnchorResolverProperties.class)
 public class DRepAnchorResolverConfiguration {
-    @Bean
+    @Bean(autowireCandidate = false)
     DRepAnchorDedicatedScheduler drepAnchorTaskScheduler(org.springframework.beans.factory.BeanFactory beans) {
         var scheduler = new DRepAnchorDedicatedScheduler(beans);
         scheduler.setPoolSize(1);

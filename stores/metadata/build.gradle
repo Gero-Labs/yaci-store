@@ -1,7 +1,13 @@
+ext['testcontainers.version'] = '1.21.4'
+
 dependencies {
     api project(":components:common")
     api project(":components:events")
     api project(":components:plugin")
+
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testRuntimeOnly 'org.postgresql:postgresql'
 }
 
 publishing {

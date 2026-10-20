@@ -2,16 +2,26 @@ package com.bloxbean.cardano.yaci.store.submit.service.scalus;
 
 import com.bloxbean.cardano.client.api.model.Amount;
 import com.bloxbean.cardano.client.api.model.Utxo;
-import com.bloxbean.cardano.client.plutus.spec.PlutusScript;
 import com.bloxbean.cardano.client.plutus.spec.PlutusV1Script;
 import com.bloxbean.cardano.client.plutus.spec.PlutusV2Script;
 import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script;
 import com.bloxbean.cardano.client.plutus.spec.serializers.PlutusDataJsonConverter;
+import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
+import com.bloxbean.cardano.client.spec.Script;
+import com.bloxbean.cardano.client.transaction.spec.script.NativeScript;
+import com.bloxbean.cardano.client.transaction.spec.script.ScriptAll;
+import com.bloxbean.cardano.client.transaction.spec.script.ScriptAny;
+import com.bloxbean.cardano.client.transaction.spec.script.ScriptAtLeast;
+import com.bloxbean.cardano.client.transaction.spec.script.ScriptPubkey;
+import com.bloxbean.cardano.client.transaction.spec.script.RequireTimeAfter;
+import com.bloxbean.cardano.client.transaction.spec.script.RequireTimeBefore;
+import co.nstant.in.cbor.model.Array;
 import com.bloxbean.cardano.client.util.HexUtil;
 import com.bloxbean.cardano.yaci.store.submit.domain.OgmiosUtxo;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.math.BigInteger;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -60,14 +70,14 @@ class ScalusAdditionalUtxoMapper {
 
     private static String referenceScriptHash(OgmiosUtxo.TxOut txOut, ReferenceScriptSupplier scriptSupplier) {
         String referenceScriptHash = txOut.getReferenceScriptHash();
-        PlutusScript plutusScript = plutusScript(txOut.getScript());
-        if (plutusScript == null)
+        Script script = referenceScript(txOut.getScript());
+        if (script == null)
             return referenceScriptHash;
 
         try {
-            referenceScriptHash = HexUtil.encodeHexString(plutusScript.getScriptHash());
+            referenceScriptHash = HexUtil.encodeHexString(script.getScriptHash());
             if (scriptSupplier != null)
-                scriptSupplier.register(referenceScriptHash, plutusScript);
+                scriptSupplier.register(referenceScriptHash, script);
             return referenceScriptHash;
         } catch (Exception e) {
             throw new IllegalArgumentException("Unable to derive reference script hash from additionalUtxoSet script", e);
@@ -140,7 +150,7 @@ class ScalusAdditionalUtxoMapper {
         }
     }
 
-    private static PlutusScript plutusScript(JsonNode scriptNode) {
+    private static Script referenceScript(JsonNode scriptNode) {
         if (scriptNode == null || scriptNode.isNull() || !scriptNode.isObject())
             return null;
 
@@ -159,11 +169,21 @@ class ScalusAdditionalUtxoMapper {
             }
         }
 
-        if (language == null || cbor == null || "native".equals(language))
+        if ("native".equals(language)) {
+            try {
+                if (cbor != null)
+                    return NativeScript.deserialize((Array) CborSerializationUtil.deserialize(HexUtil.decodeHexString(cbor)));
+                return nativeScript(scriptNode.get("json"));
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid additionalUtxoSet native reference script", e);
+            }
+        }
+
+        if (language == null || cbor == null)
             return null;
 
         // Ogmios/Blockfrost carry reference scripts in the additional UTxO output.
-        // CCL Utxo only stores the hash, so we register the decoded Plutus script
+        // CCL Utxo only stores the hash, so we register the decoded script
         // with the per-evaluation ScriptSupplier and put the derived hash on Utxo.
         return switch (language) {
             case "plutus:v1" -> PlutusV1Script.builder().cborHex(cbor).build();
@@ -171,6 +191,56 @@ class ScalusAdditionalUtxoMapper {
             case "plutus:v3" -> PlutusV3Script.builder().cborHex(cbor).build();
             default -> throw new IllegalArgumentException("Unsupported additionalUtxoSet script language: " + language);
         };
+    }
+
+    private static NativeScript nativeScript(JsonNode node) {
+        if (node == null || !node.isObject())
+            throw new IllegalArgumentException("Native reference script requires Ogmios JSON clauses");
+
+        String clause = text(node, "clause");
+        if (clause == null)
+            throw new IllegalArgumentException("Native reference script requires a clause");
+
+        return switch (clause) {
+            case "signature" -> {
+                String keyHash = text(node, "from");
+                if (keyHash == null || !keyHash.matches("[0-9a-fA-F]{56}"))
+                    throw new IllegalArgumentException("Native signature requires a 28-byte key hash");
+                yield new ScriptPubkey(keyHash);
+            }
+            case "before" -> new RequireTimeBefore(nativeInteger(node, "slot"));
+            case "after" -> new RequireTimeAfter(nativeInteger(node, "slot"));
+            case "all", "any", "some" -> {
+                JsonNode children = node.get("from");
+                if (children == null || !children.isArray())
+                    throw new IllegalArgumentException("Native reference script requires an array of children");
+                if ("all".equals(clause)) {
+                    ScriptAll all = new ScriptAll();
+                    children.forEach(child -> all.addScript(nativeScript(child)));
+                    yield all;
+                } else if ("any".equals(clause)) {
+                    ScriptAny any = new ScriptAny();
+                    children.forEach(child -> any.addScript(nativeScript(child)));
+                    yield any;
+                } else {
+                    ScriptAtLeast some = new ScriptAtLeast(nativeInteger(node, "atLeast"));
+                    children.forEach(child -> some.addScript(nativeScript(child)));
+                    yield some;
+                }
+            }
+            default -> throw new IllegalArgumentException("Unsupported native reference script clause: " + clause);
+        };
+    }
+
+    private static BigInteger nativeInteger(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || !value.isNumber())
+            throw new IllegalArgumentException("Native reference script requires a non-negative integer " + field);
+        BigDecimal number = value.decimalValue();
+        if (number.signum() < 0 || number.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) > 0
+                || number.stripTrailingZeros().scale() > 0)
+            throw new IllegalArgumentException("Native reference script requires a non-negative 64-bit integer " + field);
+        return number.toBigIntegerExact();
     }
 
     private static JsonNode first(JsonNode node, String... names) {

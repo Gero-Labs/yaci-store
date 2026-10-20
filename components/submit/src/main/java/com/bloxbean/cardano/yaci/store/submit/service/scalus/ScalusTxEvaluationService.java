@@ -18,8 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import scalus.bloxbean.EvaluatorMode;
-import scalus.bloxbean.ScalusTransactionEvaluator;
 
 import java.util.List;
 import java.util.Set;
@@ -66,16 +64,8 @@ public class ScalusTxEvaluationService {
         Set<Utxo> additionalUtxos = ScalusAdditionalUtxoMapper.fromAdditionalUtxoSet(OgmiosUtxo.fromAdditionalUtxoSet(additionalUtxoSet), scriptSupplier);
         StoreUtxoSupplier utxoSupplier = new StoreUtxoSupplier(utxoClient, scriptSupplier);
 
-        ScalusTransactionEvaluator evaluator = new ScalusTransactionEvaluator(
-                slotConfigProvider.getSlotConfig(),
-                protocolParams,
-                utxoSupplier,
-                scriptSupplier,
-                EvaluatorMode.EVALUATE_AND_COMPUTE_COST,
-                false
-        );
-
-        Result<List<EvaluationResult>> result = evaluator.evaluateTx(cborTx, additionalUtxos);
+        Result<List<EvaluationResult>> result = ScalusReferenceScriptEvaluator.evaluate(cborTx,
+                additionalUtxos, utxoSupplier, scriptSupplier, slotConfigProvider.getSlotConfig(), protocolParams);
         if (result.isSuccessful()) {
             return Either.right(toJson(result.getValue()));
         } else {

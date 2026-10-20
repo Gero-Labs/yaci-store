@@ -154,7 +154,7 @@ public class BFPoolsStorageReaderImpl implements BFPoolsStorageReader {
                 )
                 .from(POOL_REGISTRATION)
                 .where(POOL_REGISTRATION.POOL_ID.eq(poolIdHex))
-                .orderBy(POOL_REGISTRATION.SLOT.desc())
+                .orderBy(POOL_REGISTRATION.SLOT.desc(), POOL_REGISTRATION.TX_INDEX.desc(), POOL_REGISTRATION.CERT_INDEX.desc())
                 .limit(1)
                 .fetchOne();
 
@@ -257,7 +257,7 @@ public class BFPoolsStorageReaderImpl implements BFPoolsStorageReader {
                 )
                 .from(POOL_REGISTRATION)
                 .where(POOL_REGISTRATION.POOL_ID.eq(poolIdHex))
-                .orderBy(POOL_REGISTRATION.SLOT.desc())
+                .orderBy(POOL_REGISTRATION.SLOT.desc(), POOL_REGISTRATION.TX_INDEX.desc(), POOL_REGISTRATION.CERT_INDEX.desc())
                 .limit(1)
                 .fetchOne();
 
@@ -281,7 +281,7 @@ public class BFPoolsStorageReaderImpl implements BFPoolsStorageReader {
         Record record = dsl.select(POOL_REGISTRATION.RELAYS)
                 .from(POOL_REGISTRATION)
                 .where(POOL_REGISTRATION.POOL_ID.eq(poolIdHex))
-                .orderBy(POOL_REGISTRATION.SLOT.desc())
+                .orderBy(POOL_REGISTRATION.SLOT.desc(), POOL_REGISTRATION.TX_INDEX.desc(), POOL_REGISTRATION.CERT_INDEX.desc())
                 .limit(1)
                 .fetchOne();
 
@@ -333,7 +333,7 @@ public class BFPoolsStorageReaderImpl implements BFPoolsStorageReader {
         return dsl.select(POOL_REGISTRATION.VRF_KEY)
                 .from(POOL_REGISTRATION)
                 .where(POOL_REGISTRATION.POOL_ID.eq(poolIdHex))
-                .orderBy(POOL_REGISTRATION.SLOT.desc())
+                .orderBy(POOL_REGISTRATION.SLOT.desc(), POOL_REGISTRATION.TX_INDEX.desc(), POOL_REGISTRATION.CERT_INDEX.desc())
                 .limit(1)
                 .fetchOptional(POOL_REGISTRATION.VRF_KEY);
     }

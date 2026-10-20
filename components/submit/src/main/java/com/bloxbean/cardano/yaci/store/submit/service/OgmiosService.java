@@ -71,7 +71,7 @@ public class OgmiosService {
         request.put("method", "evaluateTransaction");
         ObjectNode params = request.putObject("params");
         params.putObject("transaction").put("cbor", HexUtil.encodeHexString(cbor));
-        params.set("additionalUtxoSet", additionalUtxoSet == null ? objectMapper.createArrayNode() : additionalUtxoSet);
+        params.set("additionalUtxo", additionalUtxoSet == null ? objectMapper.createArrayNode() : additionalUtxoSet);
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Type", "application/json");
         try {
@@ -118,13 +118,13 @@ public class OgmiosService {
                 "transaction": {
                     "cbor": "%s"
                 },
-                "additionalUtxoSet": []
+                "additionalUtxo": %s
             }
         }
         """;
         String requestBody;
         try {
-            String additionalUtxoSetJson = objectMapper.writeValueAsString(additionalUtxoSet);
+            String additionalUtxoSetJson = objectMapper.writeValueAsString(additionalUtxoSet == null ? Collections.emptyList() : additionalUtxoSet);
             requestBody = String.format(requestBodyTemplate, cborHex, additionalUtxoSetJson);
         } catch (Exception e) {
             throw new ApiException("Error serializing additionalUtxoSet to JSON: " + e.getMessage(), e);

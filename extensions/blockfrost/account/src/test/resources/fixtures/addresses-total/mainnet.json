@@ -1,0 +1,39 @@
+{
+  "provenance": {
+    "saved_module": "live-populated-GET004-001-mainnet/mainnet/account-responses.json",
+    "saved_module_sha256": "390571b1cdef8b9b8a51536f00422abae7c213e104569b96cc9e80e57f08e725",
+    "scope": "Closed saved account module; parent runtime acceptance pending. Mapper source validation only."
+  },
+  "nexus": {
+    "stake_address": "stake1u90dfg8nuf2pdpzmz6aaar6mej8hzfgh9ktja08a0u8kuas3eal4d",
+    "received_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "16607042158"
+      }
+    ],
+    "sent_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "16607042158"
+      }
+    ],
+    "tx_count": 17
+  },
+  "blockfrost": {
+    "stake_address": "stake1u90dfg8nuf2pdpzmz6aaar6mej8hzfgh9ktja08a0u8kuas3eal4d",
+    "received_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "16607042158"
+      }
+    ],
+    "sent_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "16607042158"
+      }
+    ],
+    "tx_count": 17
+  }
+}

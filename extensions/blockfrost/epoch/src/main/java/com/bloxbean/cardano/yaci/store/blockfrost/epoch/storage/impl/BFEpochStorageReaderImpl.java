@@ -1,9 +1,11 @@
 package com.bloxbean.cardano.yaci.store.blockfrost.epoch.storage.impl;
 
+import com.bloxbean.cardano.yaci.store.adapot.domain.EpochStake;
 import com.bloxbean.cardano.yaci.store.blockfrost.epoch.storage.BFEpochStorageReader;
 import com.bloxbean.cardano.yaci.store.common.model.Order;
 import com.bloxbean.cardano.yaci.store.epochaggr.domain.Epoch;
 import lombok.RequiredArgsConstructor;
+import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Record;
 import org.jooq.SortField;
@@ -21,6 +23,7 @@ import static com.bloxbean.cardano.yaci.store.epoch_aggr.jooq.Tables.EPOCH;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE_TOTAL;
 import static org.jooq.impl.DSL.sum;
+import static org.jooq.impl.DSL.noCondition;
 
 @Component
 @RequiredArgsConstructor
@@ -90,6 +93,36 @@ public class BFEpochStorageReaderImpl implements BFEpochStorageReader {
                 .limit(count)
                 .offset(offset)
                 .fetch(record -> record.get(BLOCK.HASH));
+    }
+
+    @Override
+    public List<EpochStake> findEpochStakes(int activeEpoch, int page, int count) {
+        return findEpochStakes(activeEpoch, page, count, noCondition());
+    }
+
+    @Override
+    public List<EpochStake> findEpochStakesByPool(int activeEpoch, String poolId, int page, int count) {
+        return findEpochStakes(activeEpoch, page, count, EPOCH_STAKE.POOL_ID.eq(poolId));
+    }
+
+    private List<EpochStake> findEpochStakes(int activeEpoch, int page, int count, Condition poolFilter) {
+        // Blockfrost omits zero-amount stake entries. Filtering after LIMIT would leave short
+        // pages and shift page boundaries; the generic ledger snapshot reader retains zeros.
+        return dsl.selectFrom(EPOCH_STAKE)
+                .where(EPOCH_STAKE.EPOCH.eq(activeEpoch - 2))
+                .and(EPOCH_STAKE.AMOUNT.gt(BigInteger.ZERO))
+                .and(poolFilter)
+                .orderBy(EPOCH_STAKE.ADDRESS.asc())
+                .limit(count)
+                .offset((long) Math.max(page, 0) * count)
+                .fetch(row -> EpochStake.builder()
+                        .epoch(row.getEpoch())
+                        .activeEpoch(row.getActiveEpoch())
+                        .address(row.getAddress())
+                        .amount(row.getAmount())
+                        .poolId(row.getPoolId())
+                        .delegationEpoch(row.getDelegationEpoch())
+                        .build());
     }
 
     @Override

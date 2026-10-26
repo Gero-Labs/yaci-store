@@ -83,7 +83,7 @@ public class BFEpochService {
             return Collections.emptyList();
         }
 
-        List<EpochStake> stakes = stakeStorageReader.getAllActiveStakesByEpoch(number, page, count);
+        List<EpochStake> stakes = epochStorageReader.findEpochStakes(number, page, count);
         return stakes.stream()
                 .map(bfEpochStakeMapper::toBFEpochStakeDto)
                 .collect(Collectors.toList());
@@ -98,7 +98,7 @@ public class BFEpochService {
         }
 
         String poolHash = normalizePoolHash(poolId);
-        List<EpochStake> stakes = stakeStorageReader.getAllActiveStakesByEpochAndPool(number, poolHash, page, count);
+        List<EpochStake> stakes = epochStorageReader.findEpochStakesByPool(number, poolHash, page, count);
         return stakes.stream()
                 .map(bfEpochStakeMapper::toBFEpochStakePoolDto)
                 .collect(Collectors.toList());

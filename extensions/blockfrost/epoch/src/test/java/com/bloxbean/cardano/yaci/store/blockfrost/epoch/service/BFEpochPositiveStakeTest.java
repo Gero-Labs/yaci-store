@@ -1,6 +1,7 @@
 package com.bloxbean.cardano.yaci.store.blockfrost.epoch.service;
 
 import com.bloxbean.cardano.yaci.store.adapot.domain.EpochStake;
+import com.bloxbean.cardano.client.crypto.Bech32;
 import com.bloxbean.cardano.yaci.store.adapot.storage.EpochStakeStorageReader;
 import com.bloxbean.cardano.yaci.store.api.epochaggr.service.EpochReadService;
 import com.bloxbean.cardano.yaci.store.blockfrost.epoch.dto.BFEpochStakeDto;
@@ -22,6 +23,7 @@ import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,6 +36,10 @@ import static org.mockito.Mockito.when;
 class BFEpochPositiveStakeTest {
     private static final String POOL_A = "01".repeat(28);
     private static final String POOL_B = "02".repeat(28);
+    private static final String ONE = reward("01");
+    private static final String TWO = reward("02");
+    private static final String THREE = reward("03");
+    private static final String LARGE = reward("04");
     private Connection connection;
     private DSLContext dsl;
     private BFEpochService service;
@@ -47,15 +53,15 @@ class BFEpochPositiveStakeTest {
         dsl.execute("create table epoch_stake (epoch int, active_epoch int, address varchar, "
                 + "amount numeric(38), pool_id varchar, delegation_epoch int, create_datetime timestamp, "
                 + "primary key (epoch, address))");
-        insert(631, "a-zero", "0", POOL_A);
-        insert(631, "b-one", "1", POOL_A);
-        insert(631, "c-zero", "0", POOL_A);
-        insert(631, "d-two", "2", POOL_B);
-        insert(631, "e-zero", "0", POOL_B);
-        insert(631, "f-three", "3", POOL_A);
-        insert(631, "g-large", "18446744073709551616", POOL_A);
-        insert(630, "aa-previous-snapshot", "99", POOL_A);
-        insert(632, "ab-next-snapshot", "99", POOL_A);
+        insert(631, reward("00"), "0", POOL_A);
+        insert(631, ONE, "1", POOL_A);
+        insert(631, reward("05"), "0", POOL_A);
+        insert(631, TWO, "2", POOL_B);
+        insert(631, reward("06"), "0", POOL_B);
+        insert(631, THREE, "3", POOL_A);
+        insert(631, LARGE, "18446744073709551616", POOL_A);
+        insert(630, reward("07"), "99", POOL_A);
+        insert(632, reward("08"), "99", POOL_A);
 
         EpochReadService epochReadService = mock(EpochReadService.class);
         when(epochReadService.getEpochByNumber(anyInt())).thenAnswer(call ->
@@ -82,9 +88,9 @@ class BFEpochPositiveStakeTest {
     @Test
     void filtersZerosBeforePagingAndUsesTheActiveEpochSnapshot() {
         assertThat(service.getEpochStakes(633, 0, 2)).extracting(BFEpochStakeDto::getStakeAddress)
-                .containsExactly("b-one", "d-two");
+                .containsExactly(ONE, TWO);
         assertThat(service.getEpochStakes(633, 1, 2)).extracting(BFEpochStakeDto::getStakeAddress)
-                .containsExactly("f-three", "g-large");
+                .containsExactly(THREE, LARGE);
         assertThat(service.getEpochStakes(633, 2, 2)).isEmpty();
         assertThat(service.getEpochStakes(633, 1, 2)).extracting(BFEpochStakeDto::getAmount)
                 .containsExactly("3", "18446744073709551616");
@@ -94,12 +100,12 @@ class BFEpochPositiveStakeTest {
     void filtersZerosBeforePagingWithinTheRequestedPool() {
         String poolId = PoolUtil.getBech32PoolId(POOL_A);
         assertThat(service.getEpochStakesByPool(633, poolId, 0, 2))
-                .extracting(BFEpochStakePoolDto::getStakeAddress).containsExactly("b-one", "f-three");
+                .extracting(BFEpochStakePoolDto::getStakeAddress).containsExactly(ONE, THREE);
         assertThat(service.getEpochStakesByPool(633, poolId, 1, 2))
-                .extracting(BFEpochStakePoolDto::getStakeAddress).containsExactly("g-large");
+                .extracting(BFEpochStakePoolDto::getStakeAddress).containsExactly(LARGE);
         assertThat(service.getEpochStakesByPool(633, poolId, 2, 2)).isEmpty();
         assertThat(service.getEpochStakesByPool(633, POOL_B, 0, 2))
-                .extracting(BFEpochStakePoolDto::getStakeAddress).containsExactly("d-two");
+                .extracting(BFEpochStakePoolDto::getStakeAddress).containsExactly(TWO);
     }
 
     @Test
@@ -112,6 +118,10 @@ class BFEpochPositiveStakeTest {
         dsl.execute("insert into epoch_stake (epoch, active_epoch, address, amount, pool_id, delegation_epoch) "
                         + "values (?, ?, ?, ?, ?, ?)",
                 epoch, epoch + 2, address, new BigInteger(amount), pool, epoch);
+    }
+
+    private static String reward(String hashByte) {
+        return Bech32.encode(HexFormat.of().parseHex("e1" + hashByte.repeat(28)), "stake");
     }
 
     private List<EpochStake> rawPage(int activeEpoch, String pool, int page, int count) {

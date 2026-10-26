@@ -1,0 +1,63 @@
+{
+  "provenance": {
+    "saved_module": "live-populated-GET004-001-preview/preview/account-responses.json",
+    "saved_module_sha256": "d679f1e549dbc18cfd216ff8e3b4adf71bfa6186a0d1d94d5d41c9ce856e6717",
+    "scope": "Closed saved account module; parent runtime acceptance pending. Mapper source validation only."
+  },
+  "nexus": {
+    "stake_address": "stake_test1uqd2nz8ugrn6kwkflvmt9he8dr966dszfmm5lt66qdmn28qt4wff9",
+    "received_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "6856133026658"
+      },
+      {
+        "unit": "d35c752af635d9e9cb79aea44537a57a5ecd91e23133cd7f210f00706d544f5349",
+        "quantity": "5"
+      },
+      {
+        "unit": "23c34d67d591018dab99dfeeb99bc8bfc554dde8605eec9b5cc02ffc41706578546f6b656e",
+        "quantity": "100"
+      },
+      {
+        "unit": "89c99d49b36d80da6a098e4f589371e1e6e262450246b3b5f31100ac4c7578",
+        "quantity": "2000"
+      }
+    ],
+    "sent_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "6523216040024"
+      }
+    ],
+    "tx_count": 108
+  },
+  "blockfrost": {
+    "stake_address": "stake_test1uqd2nz8ugrn6kwkflvmt9he8dr966dszfmm5lt66qdmn28qt4wff9",
+    "received_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "6856133026658"
+      },
+      {
+        "unit": "23c34d67d591018dab99dfeeb99bc8bfc554dde8605eec9b5cc02ffc41706578546f6b656e",
+        "quantity": "100"
+      },
+      {
+        "unit": "89c99d49b36d80da6a098e4f589371e1e6e262450246b3b5f31100ac4c7578",
+        "quantity": "2000"
+      },
+      {
+        "unit": "d35c752af635d9e9cb79aea44537a57a5ecd91e23133cd7f210f00706d544f5349",
+        "quantity": "5"
+      }
+    ],
+    "sent_sum": [
+      {
+        "unit": "lovelace",
+        "quantity": "6523216040024"
+      }
+    ],
+    "tx_count": 108
+  }
+}

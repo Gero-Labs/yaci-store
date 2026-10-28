@@ -1,0 +1,12 @@
+# Example configuration; flags also default off in code. Import explicitly to use this resource.
+# Reads and writes require PostgreSQL native schema.
+store:
+  governance:
+    anchor-resolution-enabled: false
+    anchor-resolution-max-body-bytes: 3000000
+    anchor-resolver:
+      enabled: false
+      batch-size: 16
+      retry-seconds: 3600
+      fetch-budget-millis: 15000
+      ipfs-gateways: []

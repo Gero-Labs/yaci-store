@@ -26,13 +26,15 @@ class ReferenceScriptSupplierTest {
     }
 
     @Test
-    void registerIgnoresNativeReferenceScript() throws Exception {
+    void registerRetainsNativeReferenceScriptOutsidePlutusOnlySupplier() throws Exception {
         ScriptPubkey nativeScript = new ScriptPubkey("00000000000000000000000000000000000000000000000000000000");
         String scriptRef = HexUtil.encodeHexString(nativeScript.scriptRefBytes());
         ReferenceScriptSupplier supplier = new ReferenceScriptSupplier();
 
         supplier.register("native-script-hash", scriptRef);
 
+        assertThat(supplier.hasNativeScripts()).isTrue();
+        assertThat(supplier.getScriptRef("native-script-hash").isDefined()).isTrue();
         assertThatThrownBy(() -> supplier.getScript("native-script-hash"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Reference script not found");

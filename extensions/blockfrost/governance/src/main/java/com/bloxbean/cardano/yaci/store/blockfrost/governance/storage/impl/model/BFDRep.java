@@ -1,5 +1,6 @@
 package com.bloxbean.cardano.yaci.store.blockfrost.governance.storage.impl.model;
 
+import com.bloxbean.cardano.yaci.store.governance.domain.DRepAnchorMetadata;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,4 +32,5 @@ public class BFDRep {
     private String anchorUrl;
     /** Hash from the most recent registration or update carrying an anchor */
     private String anchorHash;
+    private DRepAnchorMetadata anchorMetadata;
 }

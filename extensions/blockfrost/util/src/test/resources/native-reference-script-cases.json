@@ -1,0 +1,526 @@
+{
+  "source_contracts": {
+    "v5": {
+      "commit": "a8aab6becb2dfb8e1888750cffe1b48dad88cd9e",
+      "path": "server/src/Ogmios/Data/Json/Query.hs",
+      "function": "decodeTimeLock",
+      "sha256": "63ad617792f1450bfed57570b56aa3247811e66aaacc0242f4c476f704acd590"
+    },
+    "v6": {
+      "commit": "63a9e9d33eadbca22d1ecc90b9623b962148d174",
+      "path": "server/src/Ogmios/Data/Json/Query.hs",
+      "function": "decodeTimeLock",
+      "sha256": "26c5344d6602109ba3688dd5cf6e3c3ce0a78e2c996dbf23247d837cbc59932d"
+    }
+  },
+  "converted": [
+    {
+      "id": "signature",
+      "native": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": {
+        "clause": "signature",
+        "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "empty-all",
+      "native": {
+        "all": []
+      },
+      "expected": {
+        "clause": "all",
+        "from": []
+      }
+    },
+    {
+      "id": "empty-any",
+      "native": {
+        "any": []
+      },
+      "expected": {
+        "clause": "any",
+        "from": []
+      }
+    },
+    {
+      "id": "nested-all",
+      "native": {
+        "all": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          {
+            "startsAt": 17
+          }
+        ]
+      },
+      "expected": {
+        "clause": "all",
+        "from": [
+          {
+            "clause": "signature",
+            "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "clause": "after",
+            "slot": 17
+          }
+        ]
+      }
+    },
+    {
+      "id": "nested-any",
+      "native": {
+        "any": [
+          {
+            "expiresAt": 19
+          },
+          {
+            "all": []
+          }
+        ]
+      },
+      "expected": {
+        "clause": "any",
+        "from": [
+          {
+            "clause": "before",
+            "slot": 19
+          },
+          {
+            "clause": "all",
+            "from": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "m-of-n",
+      "native": {
+        "2": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          {
+            "any": []
+          }
+        ]
+      },
+      "expected": {
+        "clause": "some",
+        "atLeast": 2,
+        "from": [
+          {
+            "clause": "signature",
+            "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "clause": "any",
+            "from": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "zero-threshold",
+      "native": {
+        "0": []
+      },
+      "expected": {
+        "clause": "some",
+        "atLeast": 0,
+        "from": []
+      }
+    },
+    {
+      "id": "start",
+      "native": {
+        "startsAt": 0
+      },
+      "expected": {
+        "clause": "after",
+        "slot": 0
+      }
+    },
+    {
+      "id": "expire",
+      "native": {
+        "expiresAt": 9876543210
+      },
+      "expected": {
+        "clause": "before",
+        "slot": 9876543210
+      }
+    },
+    {
+      "id": "word64-slot",
+      "native": {
+        "startsAt": 18446744073709551615
+      },
+      "expected": {
+        "clause": "after",
+        "slot": 18446744073709551615
+      }
+    },
+    {
+      "id": "nested-threshold",
+      "native": {
+        "1": [
+          {
+            "all": [
+              {
+                "startsAt": 3
+              },
+              {
+                "expiresAt": 4
+              }
+            ]
+          },
+          {
+            "any": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "clause": "some",
+        "atLeast": 1,
+        "from": [
+          {
+            "clause": "all",
+            "from": [
+              {
+                "clause": "after",
+                "slot": 3
+              },
+              {
+                "clause": "before",
+                "slot": 4
+              }
+            ]
+          },
+          {
+            "clause": "any",
+            "from": [
+              {
+                "clause": "signature",
+                "from": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "ignored-extra-field",
+      "native": {
+        "all": [],
+        "extra": true
+      },
+      "expected": {
+        "clause": "all",
+        "from": []
+      }
+    },
+    {
+      "id": "all-before-any",
+      "native": {
+        "any": [
+          {
+            "startsAt": 9
+          }
+        ],
+        "all": []
+      },
+      "expected": {
+        "clause": "all",
+        "from": []
+      }
+    },
+    {
+      "id": "invalid-all-falls-back-any",
+      "native": {
+        "all": [
+          true
+        ],
+        "any": []
+      },
+      "expected": {
+        "clause": "any",
+        "from": []
+      }
+    },
+    {
+      "id": "expires-before-starts",
+      "native": {
+        "startsAt": 17,
+        "expiresAt": 19
+      },
+      "expected": {
+        "clause": "before",
+        "slot": 19
+      }
+    },
+    {
+      "id": "integer-valued-decimal-slot",
+      "native": {
+        "startsAt": 17.0
+      },
+      "expected": {
+        "clause": "after",
+        "slot": 17.0
+      }
+    },
+    {
+      "id": "int64-threshold",
+      "native": {
+        "9223372036854775807": []
+      },
+      "expected": {
+        "clause": "some",
+        "atLeast": 9223372036854775807,
+        "from": []
+      }
+    },
+    {
+      "id": "malformed-expiry-falls-back-start",
+      "native": {
+        "expiresAt": true,
+        "startsAt": 17
+      },
+      "expected": {
+        "clause": "after",
+        "slot": 17
+      }
+    }
+  ],
+  "preserved": [
+    {
+      "id": "plutus-v1",
+      "script": {
+        "plutus:v1": "4100"
+      },
+      "expected": {
+        "language": "plutus:v1",
+        "cbor": "4100"
+      }
+    },
+    {
+      "id": "plutus-v2",
+      "script": {
+        "plutus:v2": "4101"
+      },
+      "expected": {
+        "language": "plutus:v2",
+        "cbor": "4101"
+      }
+    },
+    {
+      "id": "plutus-v3",
+      "script": {
+        "plutus:v3": "4102"
+      },
+      "expected": {
+        "language": "plutus:v3",
+        "cbor": "4102"
+      }
+    },
+    {
+      "id": "direct-v6-native-json",
+      "script": {
+        "language": "native",
+        "json": {
+          "clause": "all",
+          "from": []
+        }
+      },
+      "expected": {
+        "language": "native",
+        "json": {
+          "clause": "all",
+          "from": []
+        }
+      }
+    },
+    {
+      "id": "direct-v6-native-cbor",
+      "script": {
+        "language": "native",
+        "cbor": "820180"
+      },
+      "expected": {
+        "language": "native",
+        "cbor": "820180"
+      }
+    },
+    {
+      "id": "direct-v6-plutus",
+      "script": {
+        "language": "plutus:v2",
+        "cbor": "4100",
+        "extra": "preserve"
+      },
+      "expected": {
+        "language": "plutus:v2",
+        "cbor": "4100",
+        "extra": "preserve"
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "id": "empty-object",
+      "native": {}
+    },
+    {
+      "id": "unsupported-constructor",
+      "native": {
+        "sig": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "short-signature",
+      "native": "aa"
+    },
+    {
+      "id": "nonhex-signature",
+      "native": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    },
+    {
+      "id": "null-native",
+      "native": null
+    },
+    {
+      "id": "array-native",
+      "native": []
+    },
+    {
+      "id": "boolean-native",
+      "native": true
+    },
+    {
+      "id": "number-native",
+      "native": 7
+    },
+    {
+      "id": "all-not-array",
+      "native": {
+        "all": {}
+      }
+    },
+    {
+      "id": "any-null",
+      "native": {
+        "any": null
+      }
+    },
+    {
+      "id": "bad-child",
+      "native": {
+        "all": [
+          true
+        ]
+      }
+    },
+    {
+      "id": "negative-threshold",
+      "native": {
+        "-1": []
+      }
+    },
+    {
+      "id": "fractional-threshold",
+      "native": {
+        "1.5": []
+      }
+    },
+    {
+      "id": "overflow-threshold",
+      "native": {
+        "9223372036854775808": []
+      }
+    },
+    {
+      "id": "negative-slot",
+      "native": {
+        "expiresAt": -1
+      }
+    },
+    {
+      "id": "fractional-slot",
+      "native": {
+        "startsAt": 0.5
+      }
+    },
+    {
+      "id": "overflow-slot",
+      "native": {
+        "startsAt": 18446744073709551616
+      }
+    }
+  ],
+  "wire": [
+    {
+      "id": "decimal-beyond-double-integer",
+      "native": "{\"startsAt\":9007199254740993.0}",
+      "slot": "9007199254740993"
+    },
+    {
+      "id": "decimal-word64-max",
+      "native": "{\"expiresAt\":18446744073709551615.0}",
+      "slot": "18446744073709551615"
+    },
+    {
+      "id": "tiny-fraction",
+      "native": "{\"startsAt\":17.0000000000000001}",
+      "rejected": true
+    },
+    {
+      "id": "fraction-beyond-double-integer",
+      "native": "{\"expiresAt\":9007199254740993.1}",
+      "rejected": true
+    },
+    {
+      "id": "scientific-exact-slot",
+      "native": "{\"startsAt\":9.007199254740993e15}",
+      "slot": "9007199254740993"
+    },
+    {
+      "id": "integer-word64-max",
+      "native": "{\"startsAt\":18446744073709551615}",
+      "slot": "18446744073709551615"
+    },
+    {
+      "id": "word64-overflow",
+      "native": "{\"expiresAt\":18446744073709551616.0}",
+      "rejected": true
+    },
+    {
+      "id": "negative-tiny-fraction",
+      "native": "{\"startsAt\":-0.0000000000000001}",
+      "rejected": true
+    },
+    {
+      "id": "exact-zero-decimal",
+      "native": "{\"startsAt\":0.0}",
+      "slot": "0"
+    },
+    {
+      "id": "exact-decimal-trailing-zero",
+      "native": "{\"expiresAt\":17.000}",
+      "slot": "17"
+    },
+    {
+      "id": "huge-positive-exponent",
+      "native": "{\"startsAt\":1e100000000}",
+      "rejected": true
+    },
+    {
+      "id": "huge-negative-number",
+      "native": "{\"startsAt\":-1e100000000}",
+      "rejected": true
+    },
+    {
+      "id": "tiny-positive-exponent",
+      "native": "{\"startsAt\":1e-100000000}",
+      "rejected": true
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+[
+  {
+    "tx_hash": "c62ad90e4e85622d892b66311964b27c7066fcc5da18b141e50f90e1a8f1c2e1",
+    "source": "/Users/dudiedri/Documents/Codex/2026-10-12/yaci-blockfrost-nexus/preprod/transaction-responses.json",
+    "inputs": [
+      {
+        "tx_hash": "c16b03c73c0509ecec04ea4666fe9195d603b991733505bf3d47e6d7acef2657",
+        "output_index": 10,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "9789c568249efcd09e4b00bd73a75067017afb0b0a4e43a233ba82f8649e4722",
+        "output_index": 1,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "3dd2dc32353dd1f3726c1827b16901fe22106565220f580e31188c90392826c6",
+        "output_index": 0,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "3dd2dc32353dd1f3726c1827b16901fe22106565220f580e31188c90392826c6",
+        "output_index": 2,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "3dd2dc32353dd1f3726c1827b16901fe22106565220f580e31188c90392826c6",
+        "output_index": 1,
+        "collateral": true,
+        "reference": false
+      },
+      {
+        "tx_hash": "c16b03c73c0509ecec04ea4666fe9195d603b991733505bf3d47e6d7acef2657",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "c16b03c73c0509ecec04ea4666fe9195d603b991733505bf3d47e6d7acef2657",
+        "output_index": 2,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "432a5a8cf69dc5a161de8690fca8bca6e7bfa730a7c57380d350a5b7decc2802",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      }
+    ]
+  },
+  {
+    "tx_hash": "6b9b423f1f8a6375c939310dda30258263489457b15a253e5807139ed55a7575",
+    "source": "/Users/dudiedri/Documents/Codex/2026-10-15/yaci-blockfrost-nexus-parity-20261015T073402Z/preview/transaction-responses.json",
+    "inputs": [
+      {
+        "tx_hash": "f4e5b5bb993f76a34a958f42a641e0af7dd368413469838e6a136ec16c044ac8",
+        "output_index": 0,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "f4e5b5bb993f76a34a958f42a641e0af7dd368413469838e6a136ec16c044ac8",
+        "output_index": 2,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "f4e5b5bb993f76a34a958f42a641e0af7dd368413469838e6a136ec16c044ac8",
+        "output_index": 2,
+        "collateral": true,
+        "reference": false
+      },
+      {
+        "tx_hash": "3afca83bda3967e44525e28a580f4451cfde20159ff8a96d10c0ba2a6424b088",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "f4735a539c3c65860a0eacc97729e002e10baf5ff1af522c935b6ba5b94e6f74",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      }
+    ]
+  },
+  {
+    "tx_hash": "7c252386466ab7b0da8d7f6e5f3f42caeb0ede18b8d0984d3c2dd5bae78b8cec",
+    "source": "/Users/dudiedri/Documents/Codex/2026-10-15/yaci-blockfrost-nexus-parity-20261015T073402Z/preprod/transaction-responses.json",
+    "inputs": [
+      {
+        "tx_hash": "0b7112f3380123ee21afe0b80f6a4526b1f82c9aa5691f64267c1f184571a6a1",
+        "output_index": 0,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "0ffe886b64ff131c99b3c2803f200ca3153a657ed2779c303e70f91519e71053",
+        "output_index": 1,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "faef4369dbe830fa97a7a03a0142bff7d58b968bee8f3ba72cb31c3a9aa8748d",
+        "output_index": 0,
+        "collateral": true,
+        "reference": false
+      },
+      {
+        "tx_hash": "ab8bea4b6375188cd3418c668f69bfff2692bfca637824bed8b839afb31b9ff6",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "c06276bf28ce45c65e27250d801ea761a8065e8cfd11b88181ed2f6cef04394b",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "c2aaf0e7908d339981a808101ea8daee05df385d00337a290dc1d92850a34347",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      }
+    ]
+  },
+  {
+    "tx_hash": "f5704fc26aaea7abf3a6a99114a8e768a1a48c0b6196ed6d5d6dec8af3f3a106",
+    "source": "/Users/dudiedri/Documents/Codex/2026-10-15/yaci-blockfrost-nexus-parity-20261015T073402Z/mainnet/transaction-responses.json",
+    "inputs": [
+      {
+        "tx_hash": "7c8943f09ad82b8c311088d045c05267a938d70bc007fc027101ef97014a920e",
+        "output_index": 1,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "ba456d0d579f887ac8c54f8365888ed969b37f4209afb64a82791c15db07c93e",
+        "output_index": 0,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "7c8943f09ad82b8c311088d045c05267a938d70bc007fc027101ef97014a920e",
+        "output_index": 1,
+        "collateral": true,
+        "reference": false
+      },
+      {
+        "tx_hash": "da17a0e51e8374fafa9977c5bddf4bc35af2eb53bda52dfc8b38c451e7e150f1",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      }
+    ]
+  },
+  {
+    "tx_hash": "43af40dfb70a8372ccfeac1ffaf8664f6f740b82a889d6ccc0ccec56d4ded547",
+    "source": "/Users/dudiedri/Documents/Codex/2026-10-16/bfcompat-merge-rollout/acceptance-20261016-deployed-bf3/preprod-changed-get/responses.jsonl",
+    "inputs": [
+      {
+        "tx_hash": "aee470d794694140244cff6bd9df330f020792ce96403ad46147c4202056f9f8",
+        "output_index": 1,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "aee470d794694140244cff6bd9df330f020792ce96403ad46147c4202056f9f8",
+        "output_index": 1,
+        "collateral": true,
+        "reference": false
+      },
+      {
+        "tx_hash": "c57cd4011b5dee869a684c6e5fd3954a16a9955ae6cc0946b632cb537babe278",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      }
+    ]
+  },
+  {
+    "tx_hash": "df39d52ed5e803903f94646ca9c7b8afc94436277c29f8c1b050f1749d863ce3",
+    "source": "/Users/dudiedri/Documents/Codex/2026-10-16/bfcompat-merge-rollout/acceptance-20261016-deployed-bf3/preview-changed-get/responses.jsonl",
+    "inputs": [
+      {
+        "tx_hash": "eda5ec6e3ca6deb677fd5def3ee0acbfcacedbb4e879927bcadabe3759a56257",
+        "output_index": 0,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "eda5ec6e3ca6deb677fd5def3ee0acbfcacedbb4e879927bcadabe3759a56257",
+        "output_index": 2,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "f1dbd72569027bdb651fd9c336df7e4d6d75c86b490af00765affcc5e9117019",
+        "output_index": 6,
+        "collateral": false,
+        "reference": false
+      },
+      {
+        "tx_hash": "f1dbd72569027bdb651fd9c336df7e4d6d75c86b490af00765affcc5e9117019",
+        "output_index": 6,
+        "collateral": true,
+        "reference": false
+      },
+      {
+        "tx_hash": "aca8295febb87380cbb1ba7da1dec117b83f3f14f9f7462ec9c00a3241fde8f2",
+        "output_index": 0,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "aca8295febb87380cbb1ba7da1dec117b83f3f14f9f7462ec9c00a3241fde8f2",
+        "output_index": 1,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "00886afeb13b7943fa6702cacec83409dd288f261ded328fb0cbcf81062a5c78",
+        "output_index": 5,
+        "collateral": false,
+        "reference": true
+      },
+      {
+        "tx_hash": "eda5ec6e3ca6deb677fd5def3ee0acbfcacedbb4e879927bcadabe3759a56257",
+        "output_index": 1,
+        "collateral": false,
+        "reference": true
+      }
+    ]
+  }
+]

@@ -129,6 +129,9 @@ public abstract class BFTransactionMapper {
         boolean txInvalid = raw.isTxInvalid();
 
         List<BFTxInputDto> inputs = raw.getInputs().stream()
+                // RYO orders collateral last. Keep regular/reference row order: their
+                // independent db-sync allocator IDs cannot be inferred from outpoints.
+                .sorted(Comparator.comparing(TxInputRaw::isCollateral))
                 .map(i -> BFTxInputDto.builder()
                         .address(i.getAddress())
                         .amount(i.isCollateral()
@@ -167,6 +170,11 @@ public abstract class BFTransactionMapper {
                     raw.getCollateralReturnDataJson(), txHash)
                     .ifPresent(outputs::add);
         }
+
+        // Apply the RYO output ordering after adding a JSON-backed collateral return.
+        outputs.sort(Comparator.comparing(BFTxOutputDto::getOutputIndex,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(o -> Boolean.TRUE.equals(o.getCollateral())));
 
         return BFTxUtxosDto.builder()
                 .hash(txHash)

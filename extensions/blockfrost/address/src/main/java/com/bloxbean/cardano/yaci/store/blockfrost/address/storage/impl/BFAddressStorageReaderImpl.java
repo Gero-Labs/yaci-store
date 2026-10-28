@@ -22,7 +22,6 @@ import org.jooq.SortField;
 import org.jooq.Table;
 import org.jooq.TableField;
 import org.jooq.impl.DSL;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -158,27 +157,24 @@ public class BFAddressStorageReaderImpl implements BFAddressStorageReader {
      * Get received/sent totals and transaction count for an address.
      *
      * @param address Bech32 address.
-     * @return totals and tx count, empty if the query fails.
+     * @return totals and tx count, including zero totals for an absent address.
+     * @throws org.springframework.dao.DataAccessException if a database read fails.
      */
     @Override
     public Optional<BFAddressTotal> getAddressTotal(String address) {
-        try {
-            Condition condition = addressCondition(address, ADDRESS_UTXO.OWNER_ADDR, ADDRESS_UTXO.OWNER_ADDR_FULL);
+        Condition condition = addressCondition(address, ADDRESS_UTXO.OWNER_ADDR, ADDRESS_UTXO.OWNER_ADDR_FULL);
 
-            Map<String, BigInteger> receivedMap = fetchAmountSums(condition, false);
-            Map<String, BigInteger> sentMap = fetchAmountSums(condition, true);
+        Map<String, BigInteger> receivedMap = fetchAmountSums(condition, false);
+        Map<String, BigInteger> sentMap = fetchAmountSums(condition, true);
 
-            Table<?> combinedTx = buildAddressTxTable(address);
-            Long txCount = dsl.select(DSL.countDistinct(DSL.field("tx_hash", String.class)))
-                    .from(combinedTx)
-                    .queryTimeout(QUERY_TIMEOUT_SECONDS)
-                    .fetchOne(0, Long.class);
+        Table<?> combinedTx = buildAddressTxTable(address);
+        Long txCount = dsl.select(DSL.countDistinct(DSL.field("tx_hash", String.class)))
+                .from(combinedTx)
+                .queryTimeout(QUERY_TIMEOUT_SECONDS)
+                .fetchOne(0, Long.class);
 
-            long count = txCount == null ? 0L : txCount;
-            return Optional.of(new BFAddressTotal(receivedMap, sentMap, count));
-        } catch (DataAccessException e) {
-            return Optional.empty();
-        }
+        long count = txCount == null ? 0L : txCount;
+        return Optional.of(new BFAddressTotal(receivedMap, sentMap, count));
     }
 
     /**

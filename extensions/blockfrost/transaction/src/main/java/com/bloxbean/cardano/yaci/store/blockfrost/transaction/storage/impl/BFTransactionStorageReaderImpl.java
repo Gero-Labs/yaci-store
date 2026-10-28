@@ -199,9 +199,12 @@ public class BFTransactionStorageReaderImpl implements BFTransactionStorageReade
         if (!txInvalid && !collateralKeys.isEmpty()) {
             inputs.addAll(fetchInputsByKeys(collateralKeys, true, false));
         }
-        // Reference inputs
+        // Blockfrost returns reference inputs first, ordered by their outpoint.
         if (!referenceKeys.isEmpty()) {
-            inputs.addAll(fetchInputsByKeys(referenceKeys, false, true));
+            inputs.addAll(0, fetchInputsByKeys(referenceKeys, false, true).stream()
+                    .sorted(Comparator.comparing(TxInputRaw::getTxHash)
+                            .thenComparing(TxInputRaw::getOutputIndex))
+                    .toList());
         }
 
         // Outputs

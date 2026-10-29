@@ -145,11 +145,13 @@ public class PostgresPartitionManager implements PartitionManager {
                 log.info("Migrating epoch_stake rows from default partition to {}", partitionName);
                 // Create standalone table, move data, then attach
                 createStandalonePartitionTable(dsl, parentTable, partitionTable);
+                createEpochStakeCredentialOrderIndex(dsl, partitionTable, partitionName);
                 moveEpochStakeRowsFromDefault(dsl, defaultPartition, partitionTable, epoch);
                 attachEpochStakePartition(dsl, parentTable, partitionTable, epoch);
             } else {
                 // No existing data, create partition directly
                 createEpochStakePartitionDirectly(dsl, parentTable, partitionTable, epoch);
+                createEpochStakeCredentialOrderIndex(dsl, partitionTable, partitionName);
             }
 
             log.info("Successfully created epoch_stake partition {} for epoch {}", partitionName, epoch);
@@ -306,6 +308,22 @@ public class PostgresPartitionManager implements PartitionManager {
                 partitionTable, parentTable, epoch, epoch + 1
         ));
         log.debug("Created epoch_stake partition {} for range [{}, {})", partitionTable, epoch, epoch + 1);
+    }
+
+    /**
+     * Match BFEpochStorageReaderImpl's PostgreSQL credential order so a bounded page
+     * can read the index without sorting the whole snapshot. Only call while a newly
+     * created partition is empty; existing leaves need a separate concurrent build.
+     */
+    private void createEpochStakeCredentialOrderIndex(DSLContext ctx, String partitionTable, String partitionName) {
+        String alphabet = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        String payload = "substring(lower(address), position('1' in lower(address)) + 1, 47)";
+        ctx.execute("CREATE INDEX " + partitionName + "_bf_credential_order_idx ON " + partitionTable + " ("
+                + "(case when substring(" + payload + ", 1, 1) = '7' then 0 else 1 end), "
+                + "(mod(position(substring(" + payload + ", 2, 1) in '" + alphabet + "') - 1, 4)), "
+                + "(translate(substring(" + payload + ", 3, 45), '" + alphabet
+                + "', '0123456789abcdefghijklmnopqrstuv')::bytea), "
+                + "(address::bytea)) WHERE amount > 0");
     }
 
     /**

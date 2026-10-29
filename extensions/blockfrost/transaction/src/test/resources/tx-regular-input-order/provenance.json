@@ -1,0 +1,35 @@
+{
+  "source_path": "/Users/dudiedri/Documents/Codex/2026-10-21/yaci-suite-fresh-rerun-preparation-001/runs/root-parity-20261029-GET094-001-full-mainnet/mainnet/transaction-responses.json",
+  "source_sha256": "5af2e384cb3338ed5fc0ccde49f12e7d26292108501907e5405b0f610bbc53c1",
+  "network": "mainnet",
+  "files": [
+    {
+      "file": "nexus-utxos.json",
+      "sha256": "328b7ddc74374e3d2a292b7dd0f106be2dbebe65195668588963cf34c0a1fb44",
+      "source_record_indices": [
+        4,
+        7
+      ],
+      "url": "https://nexus.gerowallet.io/api/v0/txs/1d84b853fa642d53068a8b1ba9d1bb53bbc966bdd4c155fbcddafe3e2e91fe4e/utxos",
+      "status": 200
+    },
+    {
+      "file": "blockfrost-utxos.json",
+      "sha256": "cae73140e7b76e5cc73deb43544350b0cb7ae1f1e489713496f819437a9452de",
+      "source_record_indices": [
+        8
+      ],
+      "url": "https://cardano-mainnet.blockfrost.io/api/v0/txs/1d84b853fa642d53068a8b1ba9d1bb53bbc966bdd4c155fbcddafe3e2e91fe4e/utxos",
+      "status": 200
+    },
+    {
+      "file": "blockfrost-transaction.json",
+      "sha256": "670fd9a26b57d1eee901d54f77d93e404c1b9505dbf743a48b0c2a966d874c4b",
+      "source_record_indices": [
+        6
+      ],
+      "url": "https://cardano-mainnet.blockfrost.io/api/v0/txs/1d84b853fa642d53068a8b1ba9d1bb53bbc966bdd4c155fbcddafe3e2e91fe4e",
+      "status": 200
+    }
+  ]
+}

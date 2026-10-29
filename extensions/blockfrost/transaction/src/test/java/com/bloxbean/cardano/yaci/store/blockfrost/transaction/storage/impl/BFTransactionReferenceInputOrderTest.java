@@ -39,9 +39,13 @@ class BFTransactionReferenceInputOrderTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        nexus = fixture("nexus-utxos.json");
-        blockfrost = fixture("blockfrost-utxos.json");
-        JsonNode context = fixture("blockfrost-transaction.json");
+        loadFixture("tx-reference-input-order");
+    }
+
+    private void loadFixture(String directory) throws Exception {
+        nexus = fixture(directory, "nexus-utxos.json");
+        blockfrost = fixture(directory, "blockfrost-utxos.json");
+        JsonNode context = fixture(directory, "blockfrost-transaction.json");
         connection = DriverManager.getConnection("jdbc:h2:mem:" + UUID.randomUUID() + ";DATABASE_TO_LOWER=TRUE");
         DSLContext dsl = DSL.using(connection, SQLDialect.H2);
         dsl.execute("create table address_utxo (tx_hash varchar, output_index int, owner_addr varchar, "
@@ -114,8 +118,48 @@ class BFTransactionReferenceInputOrderTest {
         assertThat(rendered.path("outputs")).isEqualTo(blockfrost.path("outputs"));
     }
 
-    private JsonNode fixture(String name) throws Exception {
-        try (var input = getClass().getResourceAsStream("/tx-reference-input-order/" + name)) {
+    @Test
+    void sortsTheCapturedMainnetRegularInputsWhilePreservingReferencesCollateralAndOutputs() throws Exception {
+        connection.close();
+        loadFixture("tx-regular-input-order");
+
+        var raw = reader.findTxUtxos(transaction.getTxHash()).orElseThrow();
+        JsonNode rendered = objectMapper.valueToTree(mapper.toUtxosDto(transaction.getTxHash(), raw));
+
+        assertThat(rendered.path("inputs")).isEqualTo(blockfrost.path("inputs"));
+        assertThat(rendered.path("outputs")).isEqualTo(blockfrost.path("outputs"));
+    }
+
+    @Test
+    void ordersRegularInputsByOutputIndexWhenTheirPreviousTransactionHashMatches() throws Exception {
+        connection.close();
+        loadFixture("tx-regular-input-order");
+        DSLContext dsl = DSL.using(connection, SQLDialect.H2);
+        JsonNode regular = blockfrost.path("inputs").get(3);
+        var indexSeven = regular.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) indexSeven).put("tx_hash", "0".repeat(64));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) indexSeven).put("output_index", 7);
+        var indexZero = indexSeven.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) indexZero).put("output_index", 0);
+        for (JsonNode input : List.of(indexSeven, indexZero)) {
+            insertUtxo(dsl, input.path("tx_hash").asText(), input, false);
+            dsl.execute("insert into tx_input values (?, ?, ?, ?)", input.path("tx_hash").asText(),
+                    input.path("output_index").intValue(), transaction.getBlockNumber(), transaction.getTxHash());
+        }
+        var expected = objectMapper.createArrayNode();
+        for (int i = 0; i < 3; i++) expected.add(blockfrost.path("inputs").get(i));
+        expected.add(indexZero).add(indexSeven);
+        for (int i = 3; i < blockfrost.path("inputs").size(); i++) expected.add(blockfrost.path("inputs").get(i));
+
+        var raw = reader.findTxUtxos(transaction.getTxHash()).orElseThrow();
+        JsonNode rendered = objectMapper.valueToTree(mapper.toUtxosDto(transaction.getTxHash(), raw));
+
+        assertThat(rendered.path("inputs")).isEqualTo(expected);
+        assertThat(rendered.path("outputs")).isEqualTo(blockfrost.path("outputs"));
+    }
+
+    private JsonNode fixture(String directory, String name) throws Exception {
+        try (var input = getClass().getResourceAsStream("/" + directory + "/" + name)) {
             if (input == null) throw new IllegalStateException("Missing saved fixture " + name);
             return objectMapper.readTree(input);
         }

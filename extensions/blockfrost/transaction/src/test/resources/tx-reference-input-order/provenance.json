@@ -1,0 +1,30 @@
+{
+  "source": "/Users/dudiedri/Documents/Codex/2026-10-21/yaci-suite-fresh-rerun-preparation-001/runs/root-post-rollout-20261026-GET005-001-full-mainnet/mainnet/transaction-responses.json",
+  "source_sha256": "40daf8b0ab21d94f5eb7a3395298e3ed8e1b0df5a5c49e227a690b72e260d4d8",
+  "audit": "/Users/dudiedri/Documents/Codex/2026-10-26/yaci-suite-mainnet-full-response-independent-audit-001/audit.json",
+  "audit_sha256": "25f77bf78125773e038b7ba5d84696cb64aa38349d8fe3fb9794c9fd9dce91fe",
+  "capture_index_zero_based": 7,
+  "transaction": "c37c3fa121d3c87c9f3cbc215bc3fd12de605f879116c2e6ca0e8bf7832a4835",
+  "saved_sides": [
+    {
+      "side": "nexus",
+      "status": 200,
+      "url": "https://nexus.gerowallet.io/api/v0/txs/c37c3fa121d3c87c9f3cbc215bc3fd12de605f879116c2e6ca0e8bf7832a4835/utxos"
+    },
+    {
+      "side": "blockfrost",
+      "status": 200,
+      "url": "https://cardano-mainnet.blockfrost.io/api/v0/txs/c37c3fa121d3c87c9f3cbc215bc3fd12de605f879116c2e6ca0e8bf7832a4835/utxos"
+    }
+  ],
+  "fixtures": {
+    "nexus-utxos.json": "0c143573950864b867ce5a3c89a88d36f37e90a1902cd79c4d0fc87caad49e4f",
+    "blockfrost-utxos.json": "5cb09db2037da0ab7efae91b4496c7df703655cc2a8c6e3452defc994cb6b886",
+    "blockfrost-transaction.json": "7a0f0ea9331c9be28d3874990ba25c0c74de90f0925b9de859d43017742ea041"
+  },
+  "unchanged_full_rows": true,
+  "preserved_cbor_available": false,
+  "root_fresh_cbor_verification_pending": true,
+  "synthetic_cbor_created": false,
+  "transaction_context_capture_index_zero_based": 6
+}

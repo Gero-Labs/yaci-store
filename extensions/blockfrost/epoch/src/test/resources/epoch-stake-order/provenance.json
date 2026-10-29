@@ -1,0 +1,27 @@
+{
+  "diagnosis_manifest_sha256": "96994cc2175c0634ce6971336cadd3786a7103b8f131c13fbad18fd93420fcc9",
+  "diagnosis_receipt_sha256": "4f909240d991c5bfaec026bb606c3ac8ff9f6293ed3bb98b9fe11ca1f9fd5764",
+  "scope": "Saved mainnet epoch633 one-pool bodies; 195 input rows including six zeros, 189 positive expected rows. Synthetic tests cover script/key order on all3 network configurations, not live global parity.",
+  "files": [
+    {
+      "source": "/Users/dudiedri/Documents/Codex/2026-10-26/epoch-stake-ordering-saved-diagnosis-001/saved-responses/001-nexus.json",
+      "resource": "nexus-page-1.json",
+      "sha256": "01f881edd52c8c6d76f615eeeef4674d51f4830b5a5270a58bf000f5c7c891d6"
+    },
+    {
+      "source": "/Users/dudiedri/Documents/Codex/2026-10-26/epoch-stake-ordering-saved-diagnosis-001/saved-responses/002-nexus.json",
+      "resource": "nexus-page-2.json",
+      "sha256": "fdf06a7d815f04114d43c94d1788e03331ba6e7af9091f4f210dcd0db8e58722"
+    },
+    {
+      "source": "/Users/dudiedri/Documents/Codex/2026-10-26/epoch-stake-ordering-saved-diagnosis-001/saved-responses/001-blockfrost.json",
+      "resource": "blockfrost-page-1.json",
+      "sha256": "3f825c9190e15147c0e119872c6c703b55e9ed0f1c12131a0e5c30c42f6e43a1"
+    },
+    {
+      "source": "/Users/dudiedri/Documents/Codex/2026-10-26/epoch-stake-ordering-saved-diagnosis-001/saved-responses/002-blockfrost.json",
+      "resource": "blockfrost-page-2.json",
+      "sha256": "a3602d320a397b967a35e927fea4a3b581a0330c86d7849d138d072bb6e1615a"
+    }
+  ]
+}

@@ -182,6 +182,7 @@ public class BFTransactionStorageReaderImpl implements BFTransactionStorageReade
                 .and(TX_INPUT.OUTPUT_INDEX.eq(ADDRESS_UTXO.OUTPUT_INDEX))
                 .where(TX_INPUT.SPENT_AT_BLOCK.eq(txn.getBlockNumber()))
                 .and(TX_INPUT.SPENT_TX_HASH.eq(txHash))
+                .orderBy(ADDRESS_UTXO.TX_HASH.asc(), ADDRESS_UTXO.OUTPUT_INDEX.asc())
                 .fetch(record -> TxInputRaw.builder()
                         .txHash(record.get(ADDRESS_UTXO.TX_HASH))
                         .outputIndex(record.get(ADDRESS_UTXO.OUTPUT_INDEX))
@@ -199,9 +200,12 @@ public class BFTransactionStorageReaderImpl implements BFTransactionStorageReade
         if (!txInvalid && !collateralKeys.isEmpty()) {
             inputs.addAll(fetchInputsByKeys(collateralKeys, true, false));
         }
-        // Reference inputs
+        // Blockfrost returns reference inputs first, ordered by their outpoint.
         if (!referenceKeys.isEmpty()) {
-            inputs.addAll(fetchInputsByKeys(referenceKeys, false, true));
+            inputs.addAll(0, fetchInputsByKeys(referenceKeys, false, true).stream()
+                    .sorted(Comparator.comparing(TxInputRaw::getTxHash)
+                            .thenComparing(TxInputRaw::getOutputIndex))
+                    .toList());
         }
 
         // Outputs
@@ -524,6 +528,7 @@ public class BFTransactionStorageReaderImpl implements BFTransactionStorageReade
                 )
                 .from(ADDRESS_UTXO)
                 .where(condition)
+                .orderBy(ADDRESS_UTXO.TX_HASH.asc(), ADDRESS_UTXO.OUTPUT_INDEX.asc())
                 .fetch(record -> TxInputRaw.builder()
                         .txHash(record.get(ADDRESS_UTXO.TX_HASH))
                         .outputIndex(record.get(ADDRESS_UTXO.OUTPUT_INDEX))

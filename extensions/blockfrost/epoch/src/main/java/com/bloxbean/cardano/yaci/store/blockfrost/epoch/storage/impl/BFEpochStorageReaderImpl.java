@@ -1,12 +1,18 @@
 package com.bloxbean.cardano.yaci.store.blockfrost.epoch.storage.impl;
 
+import com.bloxbean.cardano.yaci.store.adapot.domain.EpochStake;
 import com.bloxbean.cardano.yaci.store.blockfrost.epoch.storage.BFEpochStorageReader;
 import com.bloxbean.cardano.yaci.store.common.model.Order;
 import com.bloxbean.cardano.yaci.store.epochaggr.domain.Epoch;
 import lombok.RequiredArgsConstructor;
+import org.jooq.Condition;
 import org.jooq.DSLContext;
+import org.jooq.Field;
 import org.jooq.Record;
+import org.jooq.SQLDialect;
 import org.jooq.SortField;
+import org.jooq.impl.DSL;
+import org.jooq.impl.SQLDataType;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -21,6 +27,7 @@ import static com.bloxbean.cardano.yaci.store.epoch_aggr.jooq.Tables.EPOCH;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE;
 import static com.bloxbean.cardano.yaci.store.adapot.jooq.Tables.EPOCH_STAKE_TOTAL;
 import static org.jooq.impl.DSL.sum;
+import static org.jooq.impl.DSL.noCondition;
 
 @Component
 @RequiredArgsConstructor
@@ -90,6 +97,69 @@ public class BFEpochStorageReaderImpl implements BFEpochStorageReader {
                 .limit(count)
                 .offset(offset)
                 .fetch(record -> record.get(BLOCK.HASH));
+    }
+
+    @Override
+    public List<EpochStake> findEpochStakes(int activeEpoch, int page, int count) {
+        return findEpochStakes(activeEpoch, page, count, noCondition());
+    }
+
+    @Override
+    public List<EpochStake> findEpochStakesByPool(int activeEpoch, String poolId, int page, int count) {
+        return findEpochStakes(activeEpoch, page, count, EPOCH_STAKE.POOL_ID.eq(poolId));
+    }
+
+    private List<EpochStake> findEpochStakes(int activeEpoch, int page, int count, Condition poolFilter) {
+        // Blockfrost omits zero-amount stake entries. Filtering after LIMIT would leave short
+        // pages and shift page boundaries; the generic ledger snapshot reader retains zeros.
+        return dsl.selectFrom(EPOCH_STAKE)
+                .where(EPOCH_STAKE.EPOCH.eq(activeEpoch - 2))
+                .and(EPOCH_STAKE.AMOUNT.gt(DSL.inline(BigInteger.ZERO)))
+                .and(poolFilter)
+                .orderBy(credentialOrder())
+                .limit(count)
+                .offset((long) Math.max(page, 0) * count)
+                .fetch(row -> EpochStake.builder()
+                        .epoch(row.getEpoch())
+                        .activeEpoch(row.getActiveEpoch())
+                        .address(row.getAddress())
+                        .amount(row.getAmount())
+                        .poolId(row.getPoolId())
+                        .delegationEpoch(row.getDelegationEpoch())
+                        .build());
+    }
+
+    private List<SortField<?>> credentialOrder() {
+        // Reward addresses encode one header byte followed by the 28-byte credential.
+        // The ledger's historical Credential Ord enumerates scripts before keys. Bech32
+        // text order differs from byte order, so project the COMPLETE relation before paging.
+        String alphabet = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        Field<String> address = DSL.lower(EPOCH_STAKE.ADDRESS);
+        Field<String> payload = DSL.substring(address, DSL.position(address, DSL.inline("1")).add(DSL.inline(1)), DSL.inline(47));
+        var constructor = DSL.when(DSL.substring(payload, DSL.inline(1), DSL.inline(1)).eq(DSL.inline("7")), DSL.inline(0))
+                .otherwise(DSL.inline(1));
+
+        // Word 2 contains the header's last 3 bits and the hash's first 2 bits. Remove
+        // the network bits; words 3..47 contain the rest of the hash plus 3 zero padding bits.
+        var firstHashBits = DSL.position(DSL.inline(alphabet), DSL.substring(payload, DSL.inline(2), DSL.inline(1)))
+                .sub(DSL.inline(1)).mod(DSL.inline(4));
+        Field<String> tail = DSL.substring(payload, DSL.inline(3), DSL.inline(45));
+        Field<String> orderedTail;
+        if (dsl.dialect().family() == SQLDialect.MYSQL || dsl.dialect().family() == SQLDialect.MARIADB) {
+            // MySQL has no TRANSLATE. Two uppercase letters per word preserve numeric
+            // word order and cannot be replaced again by a later lowercase/digit source.
+            orderedTail = tail;
+            for (int i = 0; i < alphabet.length(); i++) {
+                String rank = "" + (char) ('A' + i / 26) + (char) ('A' + i % 26);
+                orderedTail = DSL.replace(orderedTail, DSL.inline(alphabet.substring(i, i + 1)), DSL.inline(rank));
+            }
+        } else {
+            orderedTail = DSL.translate(tail, DSL.inline(alphabet), DSL.inline("0123456789abcdefghijklmnopqrstuv"));
+        }
+        // Binary comparison avoids database collation changing the alphabet ranks. Address
+        // breaks equal-credential ties without dropping rows or changing their payloads.
+        return List.of(constructor.asc(), firstHashBits.asc(), orderedTail.cast(SQLDataType.VARBINARY(90)).asc(),
+                EPOCH_STAKE.ADDRESS.cast(SQLDataType.VARBINARY(255)).asc());
     }
 
     @Override

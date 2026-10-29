@@ -119,13 +119,7 @@ public interface BFAccountMapper {
     }
 
     default List<Amount> mapToAddressesTotalAmounts(Map<String, BigInteger> map) {
-        if (map == null) return Collections.emptyList();
-        return map.entrySet().stream()
-                .map(e -> Amount.builder()
-                        .unit(e.getKey())
-                        .quantity(e.getValue() == null ? BigInteger.ZERO : e.getValue())
-                        .build())
-                .toList();
+        return mapToUtxoAmounts(map);
     }
 
     default List<Amount> mapToUtxoAmounts(Map<String, BigInteger> map) {

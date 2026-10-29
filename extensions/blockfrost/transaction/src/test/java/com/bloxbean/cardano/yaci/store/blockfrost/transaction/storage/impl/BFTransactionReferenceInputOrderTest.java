@@ -158,6 +158,34 @@ class BFTransactionReferenceInputOrderTest {
         assertThat(rendered.path("outputs")).isEqualTo(blockfrost.path("outputs"));
     }
 
+    @Test
+    void ordersMultipleValidCollateralInputsByHashThenNumericOutputIndex() throws Exception {
+        connection.close();
+        loadFixture("tx-regular-input-order");
+        DSLContext dsl = DSL.using(connection, SQLDialect.H2);
+        JsonNode collateral = blockfrost.path("inputs").get(7);
+        var indexTwelve = collateral.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) indexTwelve).put("tx_hash", "0".repeat(64));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) indexTwelve).put("output_index", 12);
+        var indexSeven = indexTwelve.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) indexSeven).put("output_index", 7);
+        List<UtxoKey> collateralKeys = new ArrayList<>(transaction.getCollateralInputs());
+        for (JsonNode input : List.of(indexTwelve, indexSeven)) {
+            insertUtxo(dsl, input.path("tx_hash").asText(), input, false);
+            collateralKeys.add(new UtxoKey(input.path("tx_hash").asText(), input.path("output_index").intValue()));
+        }
+        transaction.setCollateralInputs(collateralKeys);
+        var expected = objectMapper.createArrayNode();
+        for (int i = 0; i < 7; i++) expected.add(blockfrost.path("inputs").get(i));
+        expected.add(indexSeven).add(indexTwelve).add(collateral);
+
+        var raw = reader.findTxUtxos(transaction.getTxHash()).orElseThrow();
+        JsonNode rendered = objectMapper.valueToTree(mapper.toUtxosDto(transaction.getTxHash(), raw));
+
+        assertThat(rendered.path("inputs")).isEqualTo(expected);
+        assertThat(rendered.path("outputs")).isEqualTo(blockfrost.path("outputs"));
+    }
+
     private JsonNode fixture(String directory, String name) throws Exception {
         try (var input = getClass().getResourceAsStream("/" + directory + "/" + name)) {
             if (input == null) throw new IllegalStateException("Missing saved fixture " + name);

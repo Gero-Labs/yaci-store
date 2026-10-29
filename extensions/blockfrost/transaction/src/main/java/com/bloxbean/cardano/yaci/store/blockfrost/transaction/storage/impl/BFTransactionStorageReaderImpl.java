@@ -528,6 +528,7 @@ public class BFTransactionStorageReaderImpl implements BFTransactionStorageReade
                 )
                 .from(ADDRESS_UTXO)
                 .where(condition)
+                .orderBy(ADDRESS_UTXO.TX_HASH.asc(), ADDRESS_UTXO.OUTPUT_INDEX.asc())
                 .fetch(record -> TxInputRaw.builder()
                         .txHash(record.get(ADDRESS_UTXO.TX_HASH))
                         .outputIndex(record.get(ADDRESS_UTXO.OUTPUT_INDEX))

@@ -15,6 +15,9 @@ the numeric output index. The captured hosted ordinary inputs follow that order.
 The regression loads the captured Nexus insertion order into H2 and compares the
 complete rendered inputs and outputs with the saved Blockfrost response. A second
 case inserts two outpoints with the same hash in reverse output-index order.
+The collateral regression inserts several valid collateral outpoints out of order,
+including same-hash output indices 12 and 7, and checks numeric ordering within the
+collateral group.
 Reference and valid collateral behavior are checked by the complete fixture.
 Invalid-contract control flow and flags are unchanged by the query ordering fix;
 this fixture is a valid-contract transaction.

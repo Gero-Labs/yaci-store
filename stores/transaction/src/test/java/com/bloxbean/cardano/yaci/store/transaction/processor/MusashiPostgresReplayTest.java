@@ -32,7 +32,9 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
@@ -44,9 +46,11 @@ import java.util.Objects;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@ActiveProfiles("musashi-postgres-replay")
 @Import({MusashiPostgresReplayTest.Database.class, UtxoStoreConfiguration.class})
 class MusashiPostgresReplayTest {
     @TestConfiguration(proxyBeanMethods = false)
+    @Profile("musashi-postgres-replay")
     static class Database {
         @Bean(destroyMethod = "close")
         EmbeddedPostgres postgres() throws IOException {

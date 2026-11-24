@@ -33,3 +33,22 @@ task copyDeps(type: Copy) {
 
 build.dependsOn(copyDeps)
 
+// Fork-only diagnostics for the Leios compatibility build.
+tasks.named('test') {
+    dependsOn(':stores:script:test', ':components:submit:test')
+    testLogging {
+        exceptionFormat = 'full'
+        showCauses = true
+    }
+}
+
+[project(':stores:script'), project(':components:submit')].each { target ->
+    target.tasks.withType(Test).configureEach {
+        afterTest { descriptor, result ->
+            if (descriptor.className.contains('Guarding')) {
+                logger.lifecycle("${descriptor.className}.${descriptor.name}: ${result.resultType}")
+            }
+        }
+    }
+}
+

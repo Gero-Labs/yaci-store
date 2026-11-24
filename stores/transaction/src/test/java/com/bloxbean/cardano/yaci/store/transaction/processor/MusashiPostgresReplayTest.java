@@ -13,10 +13,17 @@ import com.bloxbean.cardano.yaci.core.protocol.leiosfetch.messages.MsgLeiosBlock
 import com.bloxbean.cardano.yaci.core.protocol.leiosfetch.messages.MsgLeiosBlockTxs;
 import com.bloxbean.cardano.yaci.core.util.HexUtil;
 import com.bloxbean.cardano.yaci.helper.listener.TransactionListBuilder;
+import com.bloxbean.cardano.yaci.store.client.staking.DummyStakingClient;
+import com.bloxbean.cardano.yaci.store.client.staking.StakingClient;
 import com.bloxbean.cardano.yaci.store.events.EventMetadata;
 import com.bloxbean.cardano.yaci.store.events.RollbackEvent;
 import com.bloxbean.cardano.yaci.store.events.TransactionEvent;
+import com.bloxbean.cardano.yaci.store.events.internal.CommitEvent;
+import com.bloxbean.cardano.yaci.store.events.internal.PreCommitEvent;
+import com.bloxbean.cardano.yaci.store.events.model.internal.BatchBlock;
 import com.bloxbean.cardano.yaci.store.transaction.TransactionStoreProperties;
+import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreConfiguration;
+import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreProperties;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +33,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -36,7 +44,7 @@ import java.util.Objects;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@Import(MusashiPostgresReplayTest.Database.class)
+@Import({MusashiPostgresReplayTest.Database.class, UtxoStoreConfiguration.class})
 class MusashiPostgresReplayTest {
     @TestConfiguration(proxyBeanMethods = false)
     static class Database {
@@ -49,11 +57,22 @@ class MusashiPostgresReplayTest {
         DataSource dataSource(EmbeddedPostgres postgres) {
             return postgres.getPostgresDatabase();
         }
+
+        @Bean
+        UtxoStoreProperties utxoStoreProperties() {
+            return new UtxoStoreProperties();
+        }
+
+        @Bean
+        StakingClient stakingClient() {
+            return new DummyStakingClient();
+        }
     }
 
     @Autowired private ApplicationEventPublisher events;
     @Autowired private JdbcTemplate sql;
     @Autowired private TransactionStoreProperties settings;
+    @Autowired private TransactionTemplate dbTransaction;
 
     @Test
     void certifiedTransactionsAndTheirSignedBytesFollowRollbackAndReplay() throws IOException {
@@ -111,10 +130,10 @@ class MusashiPostgresReplayTest {
 
         publish(complete);
         assertCertifiedRows(complete, ids, wire);
-        events.publishEvent(RollbackEvent.builder()
+        dbTransaction.executeWithoutResult(status -> events.publishEvent(RollbackEvent.builder()
                 .rollbackTo(new Point(parentHeader.getSlot(), parentHeader.getBlockHash()))
                 .currentPoint(new Point(header.getSlot(), header.getBlockHash()))
-                .currentBlock(header.getBlockNumber()).build());
+                .currentBlock(header.getBlockNumber()).build()));
         assertRowCounts(certifying, 0);
         assertRowCounts(ordinary, 354);
         publish(complete);
@@ -128,7 +147,11 @@ class MusashiPostgresReplayTest {
         var metadata = EventMetadata.builder().era(block.getEra()).protocolMagic(164)
                 .block(header.getBlockNumber()).blockHash(header.getBlockHash()).slot(header.getSlot())
                 .prevBlockHash(header.getPrevHash()).noOfTxs(transactions.size()).build();
-        events.publishEvent(new TransactionEvent(metadata, transactions));
+        dbTransaction.executeWithoutResult(status -> {
+            events.publishEvent(new TransactionEvent(metadata, transactions));
+            events.publishEvent(new PreCommitEvent(metadata));
+            events.publishEvent(new CommitEvent<>(metadata, List.of(new BatchBlock(metadata, block, transactions))));
+        });
     }
 
     private void assertRowCounts(Block block, int expected) {
@@ -137,6 +160,11 @@ class MusashiPostgresReplayTest {
                 header.getBlockHash())).isEqualTo(expected);
         assertThat(sql.queryForObject("select count(*) from transaction_cbor where slot = ?", Integer.class,
                 header.getSlot())).isEqualTo(expected);
+        // Every transaction in these two captured blocks has one output and spends one input.
+        assertThat(sql.queryForObject("select count(*) from address_utxo where block_hash = ?", Integer.class,
+                header.getBlockHash())).isEqualTo(expected);
+        assertThat(sql.queryForObject("select count(*) from tx_input where spent_at_block_hash = ?", Integer.class,
+                header.getBlockHash())).isEqualTo(expected);
     }
 
     private void assertCertifiedRows(Block block, List<String> ids, List<byte[]> wire) {
@@ -162,6 +190,17 @@ class MusashiPostgresReplayTest {
             return HexUtil.encodeHexString(Blake2bUtil.blake2bHash256(submitted.get(0).bytes()));
         }, header.getBlockHash(), header.getSlot());
         assertThat(stored).containsExactlyElementsOf(ids);
+        // From the original 237 bodies: 187 of this block's own outputs are spent within it.
+        // Compare only this block's contribution, independent of missing history before the capture.
+        var unspent = sql.queryForMap("""
+                select count(*) as outputs, sum(u.lovelace_amount) as lovelace
+                from address_utxo u
+                where u.block_hash = ? and u.owner_payment_credential = ?
+                  and not exists (select 1 from tx_input i
+                                  where i.tx_hash = u.tx_hash and i.output_index = u.output_index)
+                """, header.getBlockHash(), "3dd305b41e901a0968ebac16a4ea62e866d117072054a2e9ce5b1010");
+        assertThat(((Number) unspent.get("outputs")).longValue()).isEqualTo(50);
+        assertThat(((Number) unspent.get("lovelace")).longValue()).isEqualTo(29_960_818_600_000L);
     }
 
     private static byte[] hex(String name) throws IOException {

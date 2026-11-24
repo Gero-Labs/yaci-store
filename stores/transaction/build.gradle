@@ -5,6 +5,10 @@ dependencies {
     api project(":components:plugin")
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    testImplementation project(':stores:utxo')
+    testImplementation 'io.zonky.test:embedded-postgres:2.2.2'
+    testImplementation enforcedPlatform('io.zonky.test.postgres:embedded-postgres-binaries-bom:16.16.0')
 }
 
 publishing {

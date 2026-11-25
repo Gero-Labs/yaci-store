@@ -16,7 +16,8 @@ import com.bloxbean.cardano.yaci.store.events.internal.CommitEvent;
 import com.bloxbean.cardano.yaci.store.events.internal.PreCommitEvent;
 import com.bloxbean.cardano.yaci.store.transaction.TransactionStoreProperties;
 import com.bloxbean.cardano.yaci.store.utxo.UtxoStoreConfiguration;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.TestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,21 +45,21 @@ class MusashiRepeatedCertificationTest {
     @Autowired private TransactionTemplate dbTransaction;
     @Autowired private TransactionStoreProperties settings;
 
-    @Test
-    void rollingBackOnlyTheRepeatedInclusionPreservesTheFirstConfirmationAndItsEffects() throws IOException {
+    @TestFactory
+    List<DynamicTest> rollingBackOnlyTheRepeatedInclusionPreservesTheFirstConfirmationAndItsEffects() throws IOException {
         boolean oldReturnCbor = YaciConfig.INSTANCE.isReturnFullTxCbor();
         boolean oldSaveCbor = settings.isSaveFullTxCbor();
         try {
             YaciConfig.INSTANCE.setReturnFullTxCbor(true);
             settings.setSaveFullTxCbor(true);
-            checkRepeatedInclusion();
+            return checkRepeatedInclusion();
         } finally {
             YaciConfig.INSTANCE.setReturnFullTxCbor(oldReturnCbor);
             settings.setSaveFullTxCbor(oldSaveCbor);
         }
     }
 
-    private void checkRepeatedInclusion() throws IOException {
+    private List<DynamicTest> checkRepeatedInclusion() throws IOException {
         var parent = BlockSerializer.INSTANCE.deserialize(fixture("block-10026.hex")).getHeader().getHeaderBody();
         var captured = BlockSerializer.INSTANCE.deserialize(fixture("block-10027.hex"));
         var header = captured.getHeader().getHeaderBody();
@@ -95,12 +96,17 @@ class MusashiRepeatedCertificationTest {
                 .rollbackTo(new Point(first.getSlot(), first.getBlockHash()))
                 .currentPoint(new Point(second.getSlot(), second.getBlockHash())).currentBlock(second.getBlock()).build()));
         assertThat(rowsAt(first, control, 0)).as("untouched transaction after rollback").isEqualTo(firstControl);
-        assertThat(rowsAt(first, REPEATED_TX, 236))
-                .as("original rows after rollback (just after second delivery: %s)", afterRedelivery)
-                .isEqualTo(firstRows);
-        assertThat(afterRedelivery).as("original rows while both blocks were on the chain").isEqualTo(firstRows);
-        assertThat(rowsAt(second, REPEATED_TX, 0)).as("orphaned block")
-                .isEqualTo(Map.of("confirmations", 0L, "signed_bodies", 0L, "spendable_outputs", 0L, "spent_inputs", 0L));
+        var afterRollback = rowsAt(first, REPEATED_TX, 236);
+        var orphan = rowsAt(second, REPEATED_TX, 0);
+        return firstRows.keySet().stream().map(column -> {
+            String observation = "%s before=%s repeated=%s rolledBack=%s orphan=%s".formatted(
+                    column, firstRows.get(column), afterRedelivery.get(column), afterRollback.get(column), orphan.get(column));
+            return DynamicTest.dynamicTest(observation, () -> {
+                assertThat(afterRollback.get(column)).as("first block after rollback").isEqualTo(firstRows.get(column));
+                assertThat(afterRedelivery.get(column)).as("first block after redelivery").isEqualTo(firstRows.get(column));
+                assertThat(orphan.get(column)).as("orphaned block").isEqualTo(0L);
+            });
+        }).toList();
     }
 
     private void deliver(EventMetadata block, List<Transaction> transactions) {
